@@ -1,6 +1,6 @@
 # Machine Learning Integration – Step by Step
 
-This section explains **how machine learning works in this project**, step by step, using **simple language**, and clearly shows **when police review and confirm reports**.
+This section explains **how machine learning works in this project**, step by step.
 
 ---
 
