@@ -193,168 +193,222 @@ Report → Rules → Machine Learning → Hotspots → Police Review → Machine
 Machine learning evaluates reports first, police confirm or reject them afterward, and those police decisions help the system improve over time while fully protecting user privacy.
 
 
- # Database Design — Incident Reporting & ML Trust System
+ # Database Design
 
-This project uses a simple and reliable database structure to support:
+This section lists  **each table** , its  **fields** , and a  **clear explanation of what every field means and why it exists** .
 
-- Anonymous incident reporting
-- Machine learning trust scoring
-- Device motion verification
-- Evidence file uploads
-- Police review and confirmation
-- Hotspot (cluster) detection
+The design supports:
 
-## Core Tables Overview
+* Anonymous incident reporting
+* Machine learning trust scoring
+* Device motion verification
+* Evidence file uploads
+* Police review and confirmation
+* Hotspot (cluster) detection
 
-1. `devices` — anonymous reporter devices
-2. `reports` — incident reports
-3. `evidence_files` — photos and videos
-4. `ml_results` — machine learning scores
-5. `police_reviews` — police decisions
-6. `hotspots` — detected incident clusters
-7. `hotspot_reports` — links reports to hotspots
+---
 
-## devices : This is to mean "Anonymous Reporter Devices
+## 1. devices — Anonymous Reporter Devices
 
-Stores anonymous device behavior and trust history.
-No names or phone numbers are stored.
+**Meaning:**
+Stores anonymous device behavior and trust history. No names, phone numbers, or personal data are stored.
+
+**Purpose:**
+Tracks how reliable a reporting device is over time.
 
 **Table: devices**
 
-- device_id (Primary Key)
-- device_hash (unique anonymous identifier)
-- first_seen_at
-- total_reports
-- trusted_reports
-- flagged_reports
-- device_trust_score
+* **device_id (Primary Key)**
+  Unique database ID for each device. Used to link the device to reports.
+* **device_hash**
+  Anonymous unique identifier generated from the device. Prevents duplicate identities while protecting privacy.
+* **first_seen_at**
+  Date and time when the device first submitted a report. Helps distinguish new devices from long-term reporters.
+* **total_reports**
+  Total number of reports submitted by the device. Used in behavior analysis and ML features.
+* **trusted_reports**
+  Number of reports confirmed as valid. Measures device reliability.
+* **flagged_reports**
+  Number of reports flagged or rejected. Helps detect spam or abuse.
+* **device_trust_score**
+  Calculated trust score for the device. Used by ML models when evaluating new reports.
+
+---
+
+## 2. reports — Incident Reports (Main Table)
+
+**Meaning:**
+Stores every reported incident. Each row represents one incident report.
 
 **Purpose:**
-Tracks how reliable a device has been over time.
-
-One device can submit many reports.
-
-## reports — Incident Reports (Main Table).
-
-This is the core table of the system. Each row is one incident report.
+Records what happened, where it happened, when it happened, and basic motion verification data.
 
 **Table: reports**
 
-- report_id (Primary Key)
-- device_id (Foreign Key → devices.device_id)
-- incident_type
-- description
+* **report_id (Primary Key)**
+  Unique identifier for each report. Links to ML results, police reviews, evidence, and hotspots.
+* **device_id (Foreign Key → devices.device_id)**
+  Identifies which device submitted the report. Links report credibility to device history.
+* **incident_type**
+  Category of the incident (e.g., theft, vandalism). Used for ML patterns and hotspot analysis.
+* **description**
+  Short text description of what happened. Used for human review and NLP-based ML features.
 
-**Location fields**
+### Location Fields
 
-- latitude
-- longitude
-- gps_accuracy
+* **latitude**
+  GPS latitude of the incident location. Required for mapping and clustering.
+* **longitude**
+  GPS longitude of the incident location. Used with latitude for hotspot detection.
+* **gps_accuracy**
+  GPS accuracy in meters. Low accuracy reduces trust in location data and affects ML scoring.
 
-**Motion snapshot fields**
+### Motion Snapshot Fields
 
-- motion_level
-- movement_speed
-- was_stationary
+* **motion_level**
+  Movement intensity (low / medium / high) at report time. Helps verify reporter presence.
+* **movement_speed**
+  Estimated movement speed of the device. Detects fake or remote submissions.
+* **was_stationary**
+  Indicates whether the device was still. Helps identify spoofed reports.
 
-**Status fields**
+### Status Fields
 
-- reported_at
-- rule_status
-- is_flagged
+* **reported_at**
+  Date and time the report was submitted. Used for time-based analysis and hotspot windows.
+* **rule_status**
+  Result of rule-based validation (passed / flagged / rejected). Used as an ML feature.
+* **is_flagged**
+  Marks suspicious reports for fast filtering and alerts.
+
+---
+
+## 3. evidence_files — Photos and Videos
+
+**Meaning:**
+Stores links to evidence files related to reports.
 
 **Purpose:**
-Stores what happened, where, when, and basic motion verification data captured at report time.
-
-## evidence_files — Photos and Videos
-
-Stores uploaded evidence file links.
-Actual files are stored in object storage — only links are stored here.
+Allows reports to include photos or videos without storing large files in the database.
 
 **Table: evidence_files**
 
-- evidence_id (Primary Key)
-- report_id (Foreign Key → reports.report_id)
-- file_url
-- file_type
-- uploaded_at
+* **evidence_id (Primary Key)**
+  Unique identifier for each evidence record.
+* **report_id (Foreign Key → reports.report_id)**
+  Identifies which report the evidence belongs to.
+* **file_url**
+  Path or cloud storage link to the file.
+* **file_type**
+  Type of file (photo or video). Used for processing and ML weighting.
+* **uploaded_at**
+  Date and time the evidence was uploaded. Tracks delayed evidence submissions.
 
-## ml_results — Machine Learning Scores
+---
 
-Stores machine learning evaluation results for each report.
+## 4. ml_results — Machine Learning Scores
+
+**Meaning:**
+Stores machine learning evaluation results for reports.
+
+**Purpose:**
+Shows how trustworthy the system believes each report is.
 
 **Table: ml_results**
 
-- ml_id (Primary Key)
-- report_id (Foreign Key → reports.report_id)
-- trust_score
-- prediction_label
-- model_version
-- evaluated_at
+* **ml_id (Primary Key)**
+  Unique identifier for each ML evaluation.
+* **report_id (Foreign Key → reports.report_id)**
+  Identifies which report was evaluated.
+* **trust_score**
+  Numerical reliability score (0–100). Used for prioritization and hotspot inclusion.
+* **prediction_label**
+  ML decision label (likely_real / suspicious / fake). Easy for humans to understand.
+* **model_version**
+  Version of the ML model used. Supports retraining and audits.
+* **evaluated_at**
+  Timestamp when the ML model evaluated the report.
+
+---
+
+## 5. police_reviews — Police Decisions
+
+**Meaning:**
+Stores official police feedback on reports.
 
 **Purpose:**
-Stores how trustworthy the ML model believes the report is.
-
-## police_reviews — Police Decisions
-
-Stores police confirmation or rejection of reports.
+Provides ground-truth decisions for ML training and system trust.
 
 **Table: police_reviews**
 
-- review_id (Primary Key)
-- report_id (Foreign Key → reports.report_id)
-- decision
-- review_note
-- reviewed_at
-- unit_code
+* **review_id (Primary Key)**
+  Unique identifier for each police review.
+* **report_id (Foreign Key → reports.report_id)**
+  Identifies the reviewed report.
+* **decision**
+  Police decision: confirmed, rejected, or needs_investigation.
+* **review_note**
+  Officer comments or investigation notes.
+* **reviewed_at**
+  Date and time the review was completed. Used for response-time analysis.
+* **unit_code**
+  Police unit identifier (not personal names). Ensures accountability while protecting privacy.
 
-**Decision values:**
+---
 
-- confirmed
-- rejected
-- needs_investigation
+## 6. hotspots — Detected Incident Clusters
+
+**Meaning:**
+Represents areas with clustered trusted incident reports.
 
 **Purpose:**
-Provides the true decision used for ML training and system feedback.
-
-A report may or may not have a police review yet.
-
-## hotspots — Detected Incident Clusters
-
-Stores hotspot areas detected using DBSCAN clustering.
+Identifies high-risk locations using DBSCAN clustering.
 
 **Table: hotspots**
 
-- hotspot_id (Primary Key)
-- center_lat
-- center_long
-- radius_meters
-- incident_count
-- risk_level
-- detected_at
-- time_window_hours
+* **hotspot_id (Primary Key)**
+  Unique identifier for each hotspot cluster.
+* **center_lat**
+  Latitude of the hotspot center.
+* **center_long**
+  Longitude of the hotspot center.
+* **radius_meters**
+  Radius defining the affected area.
+* **incident_count**
+  Number of reports in the cluster. Indicates hotspot strength.
+* **risk_level**
+  Risk classification (low / medium / high). Used for dashboard prioritization.
+* **detected_at**
+  Time when the hotspot was detected.
+* **time_window_hours**
+  Time span covered by the clustered reports. Distinguishes short spikes from long trends.
+
+---
+
+## 7. hotspot_reports — (Bridge Table)
+
+**Meaning:**
+Links reports to hotspot clusters.
 
 **Purpose:**
-Each row represents one high-risk area formed by grouping nearby trusted reports.
-
-## hotspot_reports — Hotspot Membership (Bridge Table)
-
-Links reports to hotspot clusters.
+Shows which reports formed each hotspot.
 
 **Table: hotspot_reports**
 
-- hotspot_id (Foreign Key → hotspots.hotspot_id)
-- report_id (Foreign Key → reports.report_id)
-- Primary Key (hotspot_id, report_id)
+* **hotspot_id (Foreign Key → hotspots.hotspot_id)**
+  Identifies the hotspot cluster.
+* **report_id (Foreign Key → reports.report_id)**
+  Identifies the report in the cluster.
+* **Primary Key (hotspot_id, report_id)**
+  Ensures each report is linked only once per hotspot.
 
-**Purpose:**
-Allows many reports to belong to one hotspot cluster.
+---
 
 ## Relationship Summary
 
-- One device → many reports
-- One report → many evidence files
-- One report → one ML result
-- One report → zero or one police review
-- One hotspot → many reports
-- `hotspot_reports` links reports to hotspots
+* One device → many reports
+* One report → many evidence files
+* One report → one ML result
+* One report → zero or one police review
+* One hotspot → many reports
+* hotspot_reports links reports to hotspots
