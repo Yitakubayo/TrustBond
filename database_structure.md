@@ -6,7 +6,7 @@
 
 ## System Overview
 
-This database structure contains **15 tables** designed to support:
+This database structure contains **16 tables** designed to support:
 
 - Anonymous incident reporting (no personal data stored)
 - **3-Rule Verification System** enhanced by **Machine Learning**
@@ -119,7 +119,7 @@ This database structure contains **15 tables** designed to support:
 
 ---
 
-## 15 Tables Summary
+## 16 Tables Summary
 
 | #   | Table Name            | Purpose                                                            | Category  |
 | --- | --------------------- | ------------------------------------------------------------------ | --------- |
@@ -131,13 +131,14 @@ This database structure contains **15 tables** designed to support:
 | 6   | `report_evidence`     | Media files (photos, videos, audio)                                | Core      |
 | 7   | `ml_models`           | Trained ML models for verification                                 | ML        |
 | 8   | `ml_predictions`      | ML analysis results per report                                     | ML        |
-| 9   | `police_users`        | Police authentication and roles                                    | Police    |
-| 10  | `notifications`       | Alerts for police officers                                         | Police    |
-| 11  | `hotspots`            | Crime cluster detection (multiple crime types per area)            | Analytics |
-| 12  | `daily_statistics`    | Pre-aggregated analytics                                           | Analytics |
-| 13  | `public_safety_zones` | Anonymized public safety map                                       | Public    |
-| 14  | `system_settings`     | Application configuration                                          | System    |
-| 15  | `activity_logs`       | Complete audit trail                                               | System    |
+| 9   | `ml_training_data`    | Verified reports used to retrain ML models                         | ML        |
+| 10  | `police_users`        | Police authentication and roles                                    | Police    |
+| 11  | `notifications`       | Alerts for police officers                                         | Police    |
+| 12  | `hotspots`            | Crime cluster detection (multiple crime types per area)            | Analytics |
+| 13  | `daily_statistics`    | Pre-aggregated analytics                                           | Analytics |
+| 14  | `public_safety_zones` | Anonymized public safety map                                       | Public    |
+| 15  | `system_settings`     | Application configuration                                          | System    |
+| 16  | `activity_logs`       | Complete audit trail                                               | System    |
 
 ---
 
@@ -502,7 +503,123 @@ type_id | parent_id | name              | severity_level
 
 ---
 
-# TABLE 9: police_users
+# TABLE 9: ml_training_data
+
+## Verified Reports for ML Model Retraining
+
+**Purpose:** Stores police-verified reports (labeled data) used to retrain and improve ML model accuracy over time.
+
+| Field                      | Type                                   | Description                              |
+| -------------------------- | -------------------------------------- | ---------------------------------------- |
+| **training_id** (PK)       | CHAR(36)                               | UUID - Unique training record identifier |
+| **report_id** (FK)         | CHAR(36)                               | FK → incident_reports (source report)    |
+| **case_id** (FK)           | CHAR(36)                               | FK → unified_cases (parent case)         |
+| **verified_label**         | ENUM('genuine', 'false', 'suspicious') | Police-confirmed verdict                 |
+| **confidence_label**       | ENUM('high', 'medium', 'low')          | How confident police are in verdict      |
+| **verified_by** (FK)       | INT                                    | FK → police_users (who verified)         |
+| **verified_at**            | TIMESTAMP                              | When police verified                     |
+| **verification_notes**     | TEXT                                   | Police notes on why this verdict         |
+| **location_data**          | JSON                                   | Extracted location features for training |
+| **motion_data**            | JSON                                   | Extracted motion features for training   |
+| **time_features**          | JSON                                   | Time-based features (hour, day, etc.)    |
+| **device_features**        | JSON                                   | Device behavior features                 |
+| **original_ml_prediction** | DECIMAL(5,4)                           | What ML predicted before verification    |
+| **prediction_was_correct** | BOOLEAN                                | Did ML agree with police verdict?        |
+| **used_in_training**       | BOOLEAN DEFAULT FALSE                  | Has this been used to train a model?     |
+| **trained_model_id** (FK)  | INT                                    | FK → ml_models (which model used this)   |
+| **trained_at**             | TIMESTAMP                              | When used in training                    |
+| **is_active**              | BOOLEAN DEFAULT TRUE                   | Include in future training?              |
+| **deactivated_reason**     | VARCHAR(255)                           | Why excluded from training               |
+| **created_at**             | TIMESTAMP                              | Record creation                          |
+
+**How Retraining Works:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    ML RETRAINING PROCESS                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  STEP 1: Police Verifies Report                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  Police reviews case → Marks as "genuine" or "false"    │   │
+│  │  → Record added to ml_training_data table               │   │
+│  │  → Extracts features: location, motion, time, device    │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  STEP 2: Training Data Accumulates                              │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  System collects verified reports over time:            │   │
+│  │  • 500+ genuine reports (labeled "genuine")             │   │
+│  │  • 100+ false reports (labeled "false")                 │   │
+│  │  → Balanced dataset for training                        │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  STEP 3: Scheduled Retraining (e.g., weekly)                    │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  System triggers retraining:                            │   │
+│  │  • Fetches all records where used_in_training = FALSE   │   │
+│  │  • Combines with existing training data                 │   │
+│  │  • Trains new model version                             │   │
+│  │  • Validates accuracy improvement                       │   │
+│  │  • If better → Activates new model                      │   │
+│  │  • Marks records: used_in_training = TRUE               │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  STEP 4: Continuous Improvement                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  Over time:                                             │   │
+│  │  • Model learns Rwanda-specific patterns                │   │
+│  │  • Accuracy improves from 70% → 85% → 95%               │   │
+│  │  • False positive rate decreases                        │   │
+│  │  • Better priority predictions                          │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Feature Extraction Example:**
+
+```json
+{
+  "location_data": {
+    "latitude": -1.9403,
+    "longitude": 29.8739,
+    "accuracy_meters": 15,
+    "location_type": "urban",
+    "known_hotspot": true
+  },
+  "motion_data": {
+    "motion_score": 67,
+    "movement_pattern": "walking",
+    "device_stable": false
+  },
+  "time_features": {
+    "hour_of_day": 22,
+    "day_of_week": 5,
+    "is_weekend": true,
+    "is_night": true
+  },
+  "device_features": {
+    "trust_score": 75,
+    "previous_reports": 3,
+    "previous_verified": 2
+  }
+}
+```
+
+**Indexes:**
+
+- PRIMARY KEY (training_id)
+- INDEX (report_id)
+- INDEX (case_id)
+- INDEX (verified_label)
+- INDEX (used_in_training)
+- INDEX (verified_at)
+- INDEX (trained_model_id)
+
+---
+
+# TABLE 10: police_users
 
 ## Police Authentication and Roles
 
@@ -555,7 +672,7 @@ type_id | parent_id | name              | severity_level
 
 ---
 
-# TABLE 10: notifications
+# TABLE 11: notifications
 
 ## Police Alerts and Notifications
 
@@ -587,7 +704,7 @@ type_id | parent_id | name              | severity_level
 
 ---
 
-# TABLE 11: hotspots
+# TABLE 12: hotspots
 
 ## Crime Cluster Detection
 
@@ -628,7 +745,7 @@ type_id | parent_id | name              | severity_level
 
 ---
 
-# TABLE 12: daily_statistics
+# TABLE 13: daily_statistics
 
 ## Pre-Aggregated Analytics
 
@@ -661,7 +778,7 @@ type_id | parent_id | name              | severity_level
 
 ---
 
-# TABLE 13: public_safety_zones
+# TABLE 14: public_safety_zones
 
 ## Anonymized Public Safety Map
 
@@ -694,7 +811,7 @@ type_id | parent_id | name              | severity_level
 
 ---
 
-# TABLE 14: system_settings
+# TABLE 15: system_settings
 
 ## Application Configuration
 
@@ -734,7 +851,7 @@ type_id | parent_id | name              | severity_level
 
 ---
 
-# TABLE 15: activity_logs
+# TABLE 16: activity_logs
 
 ## Complete Audit Trail
 
@@ -920,9 +1037,11 @@ POLICE VIEW:
 - One **device** → many **reports**
 - One **report** → many **evidence files**
 - One **report** → one **ML prediction**
+- One **report** → zero or one **training data record** (when police verifies)
 - One **unified_case** → many **reports** (grouped)
 - One **hotspot** → many **unified_cases** (different crime types in same area)
 - One **police_user** → many **assigned cases**
+- One **ml_model** → many **training data records** (used to train it)
 - One **location** → many **child locations** (hierarchical)
 - One **incident_type** → many **sub-types** (hierarchical)
 
@@ -968,7 +1087,7 @@ The police dashboard shows comprehensive crime analytics:
 │                 POLICE DASHBOARD ANALYTICS                      │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  📊 CRIME DISTRIBUTION BY REGION                                │
+│  CRIME DISTRIBUTION BY REGION                                │
 │  ┌─────────────────────────────────────────────────────────┐   │
 │  │ Kigali City:                                            │   │
 │  │   • Theft: 234 cases (most common)                      │   │
@@ -977,14 +1096,14 @@ The police dashboard shows comprehensive crime analytics:
 │  │   • Fraud: 23 cases                                     │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
-│  🔥 HOTSPOT AREAS (Multiple Crime Types)                        │
+│   HOTSPOT AREAS (Multiple Crime Types)                        │
 │  ┌─────────────────────────────────────────────────────────┐   │
 │  │ 1. Nyabugogo Market - 33 incidents (mixed types)        │   │
 │  │ 2. Kimironko Area - 28 incidents (mixed types)          │   │
 │  │ 3. Downtown Kigali - 21 incidents (mixed types)         │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
-│  📈 INSIGHTS:                                                   │
+│   INSIGHTS:                                                   │
 │  • "Theft happens more in market regions"                      │
 │  • "Assault peaks on weekend nights"                           │
 │  • "Vandalism concentrated in urban areas"                     │
@@ -1008,14 +1127,14 @@ This enables dashboard insights like:
 
 ---
 
-## Table Count: 15 Tables
+## Table Count: 16 Tables
 
 | Category      | Tables                                                                               | Count  |
 | ------------- | ------------------------------------------------------------------------------------ | ------ |
 | **Core**      | devices, locations, incident_types, unified_cases, incident_reports, report_evidence | 6      |
-| **ML**        | ml_models, ml_predictions                                                            | 2      |
+| **ML**        | ml_models, ml_predictions, ml_training_data                                          | 3      |
 | **Police**    | police_users, notifications                                                          | 2      |
 | **Analytics** | hotspots, daily_statistics                                                           | 2      |
 | **Public**    | public_safety_zones                                                                  | 1      |
 | **System**    | system_settings, activity_logs                                                       | 2      |
-| **TOTAL**     |                                                                                      | **15** |
+| **TOTAL**     |                                                                                      | **16** |
