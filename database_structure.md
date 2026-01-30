@@ -1,1541 +1,971 @@
-# TrustBond Database Design
+# TrustBond Database Structure v2.0
 
-## Complete Database Documentation
-
-This provides a **complete overview database structure** for the TrustBond Privacy-Preserving Anonymous Community Incident Reporting System.
-
-### System Features Supported:
-
-- Anonymous incident reporting (privacy-preserving)
-- Rwanda administrative geography (Provinces -> Districts -> Sectors ->  Cells -> Villages)
-- Incident taxonomy (Categories and Types)
-- Machine learning trust scoring (hybrid verification)
-- Rule-based verification engine
-- Device motion verification
-- Evidence file uploads (photos, videos, audio)
-- Police dashboard and authentication
-- Hotspot detection (DBSCAN clustering)
-- Real-time notifications
-- Analytics and statistics
-- Public community safety map
-- Complete audit trail
-- API management for integrations
+## Privacy-Preserving Anonymous Community Incident Reporting System
 
 ---
 
-# SECTION 1: CORE DEVICE MANAGEMENT
+## System Overview
+
+This database structure contains **15 tables** designed to support:
+
+- Anonymous incident reporting (no personal data stored)
+- **3-Rule Verification System** enhanced by **Machine Learning**
+- Evidence grouping (multiple reports of same incident → one unified case)
+- Police dashboard for case management
+- Public safety map for community awareness
 
 ---
 
-## 1.1 devices — Anonymous Reporter Devices
+## How Machine Learning Works with 3-Rule Verification
 
-**Meaning:**
-Stores anonymous device behavior and trust history. No names, phone numbers, or personal data are stored.
+### The 3 Hardcoded Verification Rules
 
-**Purpose:**
-Tracks how reliable a reporting device is over time using pseudonymous identification.
+| Rule                              | What It Checks           | Pass Criteria                                   |
+| --------------------------------- | ------------------------ | ----------------------------------------------- |
+| **1. Location Verification**      | GPS coordinates validity | Within Rwanda boundaries, accuracy ≤ 100 meters |
+| **2. Motion Sensor Verification** | Device movement patterns | Sensor score ≥ 30 (proves human holding device) |
+| **3. Duplicate Detection**        | Similar nearby reports   | Groups reports within 200m radius + 24hr window |
 
-| Field                    | Type                   | Description                                                                  |
-| ------------------------ | ---------------------- | ---------------------------------------------------------------------------- |
-| **device_id** (PK)       | CHAR(36)               | UUID - Unique identifier for each device                                     |
-| **device_fingerprint**   | VARCHAR(255)           | SHA-256 hash of hardware characteristics - non-reversible, ensures anonymity |
-| **platform**             | ENUM('android', 'ios') | Mobile platform type                                                         |
-| **app_version**          | VARCHAR(20)            | Version of TrustBond app installed                                           |
-| **os_version**           | VARCHAR(30)            | Operating system version                                                     |
-| **device_language**      | VARCHAR(10)            | Preferred language (en=English)                                              |
-| **current_trust_score**  | DECIMAL(5,2)           | Current trust score (0-100). New devices start at 50                         |
-| **total_reports**        | INT                    | Total reports submitted by this device                                       |
-| **trusted_reports**      | INT                    | Reports confirmed as valid                                                   |
-| **suspicious_reports**   | INT                    | Reports marked as suspicious                                                 |
-| **false_reports**        | INT                    | Reports confirmed as false                                                   |
-| **is_blocked**           | BOOLEAN                | Whether device is blocked from reporting                                     |
-| **block_reason**         | TEXT                   | Reason for blocking                                                          |
-| **blocked_at**           | TIMESTAMP              | When device was blocked                                                      |
-| **blocked_by**           | INT                    | Police user who blocked the device                                           |
-| **push_token_encrypted** | VARCHAR(500)           | Encrypted FCM/APNs token for notifications                                   |
-| **registered_at**        | TIMESTAMP              | First report submission time                                                 |
-| **last_active_at**       | TIMESTAMP              | Last activity timestamp                                                      |
-| **last_report_at**       | TIMESTAMP              | Last report submission time                                                  |
-
----
-
-## 1.2 device_trust_history — Device Trust Score History
-
-**Meaning:**
-Historical record of device trust score changes over time.
-
-**Purpose:**
-Enables trend analysis and audit trail of trust score evolution.
-
-| Field                        | Type         | Description                                                       |
-| ---------------------------- | ------------ | ----------------------------------------------------------------- |
-| **history_id** (PK)          | INT          | Unique identifier for history record                              |
-| **device_id** (FK → devices) | CHAR(36)     | Device being tracked                                              |
-| **trust_score**              | DECIMAL(5,2) | Trust score at this point                                         |
-| **total_reports**            | INT          | Total reports at snapshot time                                    |
-| **trusted_reports**          | INT          | Trusted reports at snapshot                                       |
-| **suspicious_reports**       | INT          | Suspicious reports at snapshot                                    |
-| **false_reports**            | INT          | False reports at snapshot                                         |
-| **score_change**             | DECIMAL(5,2) | Change from previous snapshot                                     |
-| **change_reason**            | VARCHAR(100) | Reason for change (report_verified, report_rejected, decay, etc.) |
-| **calculated_at**            | TIMESTAMP    | When snapshot was taken                                           |
-
----
-
-# SECTION 2: RWANDA ADMINISTRATIVE GEOGRAPHY
-
----
-
-## 2.1 provinces — Rwanda Provinces
-
-**Meaning:**
-Top-level administrative divisions of Rwanda (5 provinces).
-
-**Purpose:**
-Hierarchical location reference for incident mapping.
-
-| Field                  | Type          | Description                          |
-| ---------------------- | ------------- | ------------------------------------ |
-| **province_id** (PK)   | TINYINT       | Unique province identifier           |
-| **province_name**      | VARCHAR(50)   | Province name                        |
-| **province_code**      | CHAR(2)       | Two-letter province code             |
-| **boundary_geojson**   | JSON          | Province boundary as GeoJSON polygon |
-| **centroid_latitude**  | DECIMAL(10,8) | Center point latitude                |
-| **centroid_longitude** | DECIMAL(11,8) | Center point longitude               |
-| **population**         | INT           | Province population                  |
-| **area_sq_km**         | DECIMAL(10,2) | Area in square kilometers            |
-| **district_count**     | TINYINT       | Number of districts                  |
-| **created_at**         | TIMESTAMP     | Record creation time                 |
-
----
-
-## 2.2 districts — Rwanda Districts
-
-**Meaning:**
-District-level administration (30 districts in Rwanda).
-
-**Purpose:**
-Primary geographic unit for incident reporting and police jurisdiction.
-
-| Field                            | Type          | Description                       |
-| -------------------------------- | ------------- | --------------------------------- |
-| **district_id** (PK)             | TINYINT       | Unique district identifier        |
-| **province_id** (FK → provinces) | TINYINT       | Parent province                   |
-| **district_name**                | VARCHAR(100)  | District name                     |
-| **district_code**                | VARCHAR(10)   | Unique district code              |
-| **boundary_geojson**             | JSON          | District boundary as GeoJSON      |
-| **centroid_latitude**            | DECIMAL(10,8) | Center point latitude             |
-| **centroid_longitude**           | DECIMAL(11,8) | Center point longitude            |
-| **population**                   | INT           | District population               |
-| **area_sq_km**                   | DECIMAL(10,2) | Area in square kilometers         |
-| **sector_count**                 | TINYINT       | Number of sectors                 |
-| **is_pilot_area**                | BOOLEAN       | TRUE for Musanze district (pilot) |
-| **pilot_start_date**             | DATE          | When pilot program started        |
-| **pilot_end_date**               | DATE          | When pilot program ends           |
-| **is_active**                    | BOOLEAN       | Whether district is active        |
-| **created_at**                   | TIMESTAMP     | Record creation time              |
-| **updated_at**                   | TIMESTAMP     | Last update time                  |
-
----
-
-## 2.3 sectors — Sectors within Districts
-
-**Meaning:**
-Sector-level administration within districts.
-
-**Purpose:**
-Finer geographic granularity for incident location and police assignment.
-
-| Field                            | Type          | Description                |
-| -------------------------------- | ------------- | -------------------------- |
-| **sector_id** (PK)               | SMALLINT      | Unique sector identifier   |
-| **district_id** (FK → districts) | TINYINT       | Parent district            |
-| **sector_name**                  | VARCHAR(100)  | Sector name                |
-| **sector_code**                  | VARCHAR(20)   | Unique sector code         |
-| **boundary_geojson**             | JSON          | Sector boundary as GeoJSON |
-| **centroid_latitude**            | DECIMAL(10,8) | Center point latitude      |
-| **centroid_longitude**           | DECIMAL(11,8) | Center point longitude     |
-| **population**                   | INT           | Sector population          |
-| **area_sq_km**                   | DECIMAL(10,2) | Area in square kilometers  |
-| **cell_count**                   | TINYINT       | Number of cells            |
-| **police_station_name**          | VARCHAR(100)  | Local police station name  |
-| **police_station_contact**       | VARCHAR(20)   | Police station phone       |
-| **is_active**                    | BOOLEAN       | Whether sector is active   |
-| **created_at**                   | TIMESTAMP     | Record creation time       |
-| **updated_at**                   | TIMESTAMP     | Last update time           |
-
----
-
-## 2.4 cells — Cells within Sectors
-
-**Meaning:**
-Cell-level administration (smallest official admin unit).
-
-**Purpose:**
-Most granular official geographic reference for incidents.
-
-| Field                        | Type          | Description                              |
-| ---------------------------- | ------------- | ---------------------------------------- |
-| **cell_id** (PK)             | SMALLINT      | Unique cell identifier                   |
-| **sector_id** (FK → sectors) | SMALLINT      | Parent sector                            |
-| **cell_name**                | VARCHAR(100)  | Cell name                                |
-| **cell_code**                | VARCHAR(30)   | Unique cell code                         |
-| **boundary_geojson**         | JSON          | Cell boundary as GeoJSON                 |
-| **centroid_latitude**        | DECIMAL(10,8) | Center point latitude                    |
-| **centroid_longitude**       | DECIMAL(11,8) | Center point longitude                   |
-| **population**               | INT           | Cell population                          |
-| **area_sq_km**               | DECIMAL(8,2)  | Area in square kilometers                |
-| **cell_leader_title**        | VARCHAR(50)   | Local leader title (Executive Secretary) |
-| **is_active**                | BOOLEAN       | Whether cell is active                   |
-| **created_at**               | TIMESTAMP     | Record creation time                     |
-| **updated_at**               | TIMESTAMP     | Last update time                         |
-
----
-
-## 2.5 villages — Villages within Cells
-
-**Meaning:**
-Village-level locations within cells.
-
-**Purpose:**
-Optional finer location detail for rural areas.
-
-| Field                    | Type          | Description               |
-| ------------------------ | ------------- | ------------------------- |
-| **village_id** (PK)      | INT           | Unique village identifier |
-| **cell_id** (FK → cells) | SMALLINT      | Parent cell               |
-| **village_name**         | VARCHAR(100)  | Village name              |
-| **village_code**         | VARCHAR(40)   | Unique village code       |
-| **centroid_latitude**    | DECIMAL(10,8) | Center point latitude     |
-| **centroid_longitude**   | DECIMAL(11,8) | Center point longitude    |
-| **population**           | INT           | Village population        |
-| **household_count**      | INT           | Number of households      |
-| **is_active**            | BOOLEAN       | Whether village is active |
-| **created_at**           | TIMESTAMP     | Record creation time      |
-| **updated_at**           | TIMESTAMP     | Last update time          |
-
----
-
-# SECTION 3: INCIDENT TAXONOMY
-
----
-
-## 3.1 incident_categories — Main Incident Categories
-
-**Meaning:**
-Top-level incident categories (Theft, Vandalism, etc.).
-
-**Purpose:**
-Organizes incident types into logical groups for reporting and analysis.
-
-| Field                 | Type         | Description                             |
-| --------------------- | ------------ | --------------------------------------- |
-| **category_id** (PK)  | TINYINT      | Unique category identifier              |
-| **category_name**     | VARCHAR(100) | Category name                           |
-| **description**       | TEXT         | Category description                    |
-| **icon_name**         | VARCHAR(50)  | Material icon name for UI               |
-| **color_hex**         | CHAR(7)      | Category color for UI (#1976D2)         |
-| **display_order**     | TINYINT      | Order in category list                  |
-| **is_active**         | BOOLEAN      | Whether category is active              |
-| **requires_evidence** | BOOLEAN      | Force evidence upload for this category |
-| **created_at**        | TIMESTAMP    | Record creation time                    |
-| **updated_at**        | TIMESTAMP    | Last update time                        |
-
----
-
-## 3.2 incident_types — Specific Incident Types
-
-**Meaning:**
-Specific incident types within categories.
-
-**Purpose:**
-Detailed incident classification for ML patterns and police response.
-
-| Field                                      | Type         | Description                                  |
-| ------------------------------------------ | ------------ | -------------------------------------------- |
-| **type_id** (PK)                           | SMALLINT     | Unique type identifier                       |
-| **category_id** (FK → incident_categories) | TINYINT      | Parent category                              |
-| **type_name**                              | VARCHAR(100) | Type name                                    |
-| **description**                            | TEXT         | Type description                             |
-| **severity_level**                         | TINYINT      | 1=Minor, 2=Low, 3=Medium, 4=High, 5=Critical |
-| **response_priority**                      | ENUM         | low, normal, high, urgent                    |
-| **requires_photo**                         | BOOLEAN      | Photo required for this type                 |
-| **requires_video**                         | BOOLEAN      | Video required for this type                 |
-| **min_description_length**                 | INT          | Minimum description characters               |
-| **icon_name**                              | VARCHAR(50)  | Specific icon override                       |
-| **display_order**                          | TINYINT      | Order within category                        |
-| **is_active**                              | BOOLEAN      | Whether type is active                       |
-| **created_at**                             | TIMESTAMP    | Record creation time                         |
-| **updated_at**                             | TIMESTAMP    | Last update time                             |
-
----
-
-# SECTION 4: INCIDENT REPORTS (Core Transaction Table)
-
----
-
-## 4.1 incident_reports — Main Reports Table
-
-**Meaning:**
-Core incident reports - every reported incident is stored here.
-
-**Purpose:**
-Central table linking all report data including location, evidence, verification, and ML scoring.
-
-### Basic Information
-
-| Field                                      | Type         | Description                     |
-| ------------------------------------------ | ------------ | ------------------------------- |
-| **report_id** (PK)                         | CHAR(36)     | UUID - Unique report identifier |
-| **device_id** (FK → devices)               | CHAR(36)     | Reporting device (anonymous)    |
-| **incident_type_id** (FK → incident_types) | SMALLINT     | Type of incident                |
-| **title**                                  | VARCHAR(200) | Optional short title            |
-| **description**                            | TEXT         | Detailed incident description   |
-
-### Location Fields
-
-| Field                            | Type          | Description                   |
-| -------------------------------- | ------------- | ----------------------------- |
-| **latitude**                     | DECIMAL(10,8) | GPS latitude (-90 to 90)      |
-| **longitude**                    | DECIMAL(11,8) | GPS longitude (-180 to 180)   |
-| **location_accuracy_meters**     | DECIMAL(8,2)  | GPS accuracy in meters        |
-| **altitude_meters**              | DECIMAL(8,2)  | Altitude if available         |
-| **location_source**              | ENUM          | gps, network, manual          |
-| **district_id** (FK → districts) | TINYINT       | Resolved district             |
-| **sector_id** (FK → sectors)     | SMALLINT      | Resolved sector               |
-| **cell_id** (FK → cells)         | SMALLINT      | Resolved cell                 |
-| **village_id** (FK → villages)   | INT           | Resolved village (optional)   |
-| **address_description**          | VARCHAR(255)  | Optional landmark description |
-
-### Temporal Fields
-
-| Field                         | Type      | Description                     |
-| ----------------------------- | --------- | ------------------------------- |
-| **reported_at**               | TIMESTAMP | When report was submitted       |
-| **incident_occurred_at**      | TIMESTAMP | When incident actually happened |
-| **incident_time_approximate** | BOOLEAN   | User unsure of exact time       |
-
-### Evidence Summary
-
-| Field                      | Type    | Description                    |
-| -------------------------- | ------- | ------------------------------ |
-| **photo_count**            | TINYINT | Number of photos attached      |
-| **video_count**            | TINYINT | Number of videos attached      |
-| **audio_count**            | TINYINT | Number of audio files attached |
-| **total_evidence_size_kb** | INT     | Total evidence file size       |
-
-### Motion Sensor Data (Verification)
-
-| Field                   | Type         | Description                               |
-| ----------------------- | ------------ | ----------------------------------------- |
-| **accelerometer_data**  | JSON         | {x, y, z, magnitude, samples[]}           |
-| **gyroscope_data**      | JSON         | {x, y, z, rotation_rate}                  |
-| **magnetometer_data**   | JSON         | Compass data for orientation              |
-| **device_motion_score** | DECIMAL(5,2) | 0-100: Higher = more motion during report |
-| **device_orientation**  | VARCHAR(20)  | portrait, landscape, flat                 |
-| **battery_level**       | TINYINT      | Battery % at report time                  |
-| **network_type**        | VARCHAR(20)  | wifi, 4g, 3g, 2g                          |
-
-### Rule-Based Verification (Stage 1)
-
-| Field                       | Type      | Description                           |
-| --------------------------- | --------- | ------------------------------------- |
-| **rule_check_status**       | ENUM      | pending, passed, failed, partial      |
-| **rule_check_completed_at** | TIMESTAMP | When rule check finished              |
-| **rules_passed**            | INT       | Number of rules passed                |
-| **rules_failed**            | INT       | Number of rules failed                |
-| **rules_total**             | INT       | Total rules executed                  |
-| **rule_failure_reasons**    | JSON      | Array of {rule_id, rule_name, reason} |
-| **is_auto_rejected**        | BOOLEAN   | TRUE if blocking rule failed          |
-
-### ML Trust Scoring (Stage 2)
-
-| Field                            | Type         | Description                          |
-| -------------------------------- | ------------ | ------------------------------------ |
-| **ml_model_id** (FK → ml_models) | INT          | Which model scored this              |
-| **ml_trust_score**               | DECIMAL(5,2) | 0-100 trust score from ML            |
-| **ml_confidence**                | DECIMAL(5,4) | Model confidence in prediction       |
-| **ml_feature_vector**            | JSON         | Features used (for explainability)   |
-| **ml_scored_at**                 | TIMESTAMP    | When ML scoring completed            |
-| **trust_classification**         | ENUM         | Trusted, Suspicious, False, Pending  |
-| **classification_reason**        | VARCHAR(255) | Why this classification was assigned |
-
-### Police Verification (Ground Truth)
-
-| Field                                      | Type      | Description                                             |
-| ------------------------------------------ | --------- | ------------------------------------------------------- |
-| **police_verified**                        | BOOLEAN   | Has police reviewed this                                |
-| **police_verified_at**                     | TIMESTAMP | When verified                                           |
-| **police_verified_by** (FK → police_users) | INT       | Officer who verified                                    |
-| **police_verification_status**             | ENUM      | pending, confirmed, false, duplicate, insufficient_info |
-| **police_verification_notes**              | TEXT      | Officer notes                                           |
-| **police_priority**                        | ENUM      | low, normal, high, urgent                               |
-
-### Workflow Status
-
-| Field                                              | Type         | Description                                                                               |
-| -------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------- |
-| **report_status**                                  | ENUM         | submitted, rule_checking, ml_scoring, pending_review, investigating, resolved, rejected   |
-| **processing_stage**                               | ENUM         | received, rule_validation, ml_scoring, clustering, ready_for_review, in_review, completed |
-| **is_duplicate**                                   | BOOLEAN      | Is this a duplicate report                                                                |
-| **duplicate_of_report_id** (FK → incident_reports) | CHAR(36)     | Original report if duplicate                                                              |
-| **duplicate_confidence**                           | DECIMAL(5,2) | How confident it's a duplicate                                                            |
-
-### Assignment & Resolution
-
-| Field                                       | Type         | Description                                                       |
-| ------------------------------------------- | ------------ | ----------------------------------------------------------------- |
-| **assigned_officer_id** (FK → police_users) | INT          | Assigned officer                                                  |
-| **assigned_unit**                           | VARCHAR(100) | Assigned police unit                                              |
-| **assigned_at**                             | TIMESTAMP    | When assigned                                                     |
-| **resolved_at**                             | TIMESTAMP    | When resolved                                                     |
-| **resolution_type**                         | ENUM         | action_taken, no_action_needed, referred, false_report, duplicate |
-| **resolution_notes**                        | TEXT         | Resolution details                                                |
-
-### Hotspot Linkage
-
-| Field                          | Type      | Description                   |
-| ------------------------------ | --------- | ----------------------------- |
-| **hotspot_id** (FK → hotspots) | INT       | Assigned hotspot if clustered |
-| **added_to_hotspot_at**        | TIMESTAMP | When added to hotspot         |
-
-### Metadata
-
-| Field                  | Type        | Description                   |
-| ---------------------- | ----------- | ----------------------------- |
-| **app_version**        | VARCHAR(20) | App version used              |
-| **submission_ip_hash** | VARCHAR(64) | Hashed IP for fraud detection |
-| **created_at**         | TIMESTAMP   | Record creation               |
-| **updated_at**         | TIMESTAMP   | Last update                   |
-
----
-
-# SECTION 5: EVIDENCE MANAGEMENT
-
----
-
-## 5.1 report_evidence — Evidence Files
-
-**Meaning:**
-Stores metadata for photos, videos, and audio evidence.
-
-**Purpose:**
-Links evidence files to reports with quality analysis and moderation status.
-
-| Field                                 | Type          | Description                          |
-| ------------------------------------- | ------------- | ------------------------------------ |
-| **evidence_id** (PK)                  | CHAR(36)      | UUID - Unique evidence identifier    |
-| **report_id** (FK → incident_reports) | CHAR(36)      | Parent report                        |
-| **evidence_type**                     | ENUM          | photo, video, audio                  |
-| **file_name**                         | VARCHAR(255)  | Original file name                   |
-| **file_path**                         | VARCHAR(500)  | Encrypted storage path               |
-| **file_size_bytes**                   | INT           | File size in bytes                   |
-| **mime_type**                         | VARCHAR(100)  | MIME type (image/jpeg, video/mp4)    |
-| **duration_seconds**                  | SMALLINT      | Duration for video/audio             |
-| **width_pixels**                      | SMALLINT      | Width for photo/video                |
-| **height_pixels**                     | SMALLINT      | Height for photo/video               |
-| **file_hash_sha256**                  | CHAR(64)      | SHA-256 for integrity check          |
-| **file_hash_perceptual**              | VARCHAR(64)   | pHash for image similarity detection |
-| **captured_at**                       | TIMESTAMP     | When media was captured              |
-| **capture_latitude**                  | DECIMAL(10,8) | GPS latitude from EXIF               |
-| **capture_longitude**                 | DECIMAL(11,8) | GPS longitude from EXIF              |
-| **camera_metadata**                   | JSON          | EXIF data: make, model, settings     |
-| **blur_score**                        | DECIMAL(5,2)  | 0-100: Higher = sharper image        |
-| **brightness_score**                  | DECIMAL(5,2)  | 0-100: Image brightness              |
-| **is_low_quality**                    | BOOLEAN       | Flagged as low quality               |
-| **quality_issues**                    | JSON          | Array of quality problems            |
-| **content_moderation_status**         | ENUM          | pending, approved, flagged, rejected |
-| **has_inappropriate_content**         | BOOLEAN       | Contains inappropriate content       |
-| **moderation_flags**                  | JSON          | Content moderation results           |
-| **moderated_at**                      | TIMESTAMP     | When moderated                       |
-| **moderated_by** (FK → police_users)  | INT           | Who moderated                        |
-| **is_processed**                      | BOOLEAN       | Processing completed                 |
-| **is_deleted**                        | BOOLEAN       | Soft delete flag                     |
-| **deleted_at**                        | TIMESTAMP     | When deleted                         |
-| **deletion_reason**                   | VARCHAR(100)  | Why deleted                          |
-| **uploaded_at**                       | TIMESTAMP     | Upload timestamp                     |
-
----
-
-# SECTION 6: VERIFICATION RULES ENGINE
-
----
-
-## 6.1 verification_rules — Configurable Rules
-
-**Meaning:**
-Configurable verification rules for report validation.
-
-**Purpose:**
-Defines rules for Stage 1 (rule-based) verification with flexible parameters.
-
-| Field                              | Type         | Description                                          |
-| ---------------------------------- | ------------ | ---------------------------------------------------- |
-| **rule_id** (PK)                   | SMALLINT     | Unique rule identifier                               |
-| **rule_name**                      | VARCHAR(100) | Human-readable rule name                             |
-| **rule_code**                      | VARCHAR(50)  | Programmatic identifier                              |
-| **rule_description**               | TEXT         | Rule description                                     |
-| **rule_category**                  | ENUM         | spatial, temporal, motion, evidence, device, content |
-| **rule_parameters**                | JSON         | Flexible rule configuration (thresholds, limits)     |
-| **severity**                       | ENUM         | info, low, medium, high, critical                    |
-| **is_blocking**                    | BOOLEAN      | If TRUE, failure auto-rejects report                 |
-| **failure_score_penalty**          | DECIMAL(5,2) | Points deducted if rule fails                        |
-| **execution_order**                | SMALLINT     | Order of rule execution                              |
-| **is_active**                      | BOOLEAN      | Whether rule is enabled                              |
-| **applies_to_categories**          | JSON         | NULL = all, or array of category_ids                 |
-| **applies_to_districts**           | JSON         | NULL = all, or array of district_ids                 |
-| **created_at**                     | TIMESTAMP    | Record creation                                      |
-| **updated_at**                     | TIMESTAMP    | Last update                                          |
-| **created_by** (FK → police_users) | INT          | Who created the rule                                 |
-
----
-
-## 6.2 rule_execution_logs — Rule Execution Results
-
-**Meaning:**
-Logs each rule execution result for every report.
-
-**Purpose:**
-Audit trail and analysis of rule effectiveness.
-
-| Field                                 | Type         | Description                   |
-| ------------------------------------- | ------------ | ----------------------------- |
-| **execution_id** (PK)                 | INT          | Unique execution identifier   |
-| **report_id** (FK → incident_reports) | CHAR(36)     | Report being checked          |
-| **rule_id** (FK → verification_rules) | SMALLINT     | Rule that was executed        |
-| **passed**                            | BOOLEAN      | Whether rule passed           |
-| **input_values**                      | JSON         | Values that were checked      |
-| **threshold_values**                  | JSON         | Thresholds used               |
-| **failure_reason**                    | TEXT         | Why it failed (if applicable) |
-| **execution_time_ms**                 | DECIMAL(8,2) | Rule execution time           |
-| **executed_at**                       | TIMESTAMP    | When rule was executed        |
-
----
-
-# SECTION 7: MACHINE LEARNING SYSTEM
-
----
-
-## 7.1 ml_models — ML Model Registry
-
-**Meaning:**
-Tracks ML model versions and performance metrics.
-
-**Purpose:**
-Model versioning, A/B testing, and performance monitoring.
-
-| Field                              | Type         | Description                                       |
-| ---------------------------------- | ------------ | ------------------------------------------------- |
-| **model_id** (PK)                  | INT          | Unique model identifier                           |
-| **model_name**                     | VARCHAR(100) | Model name                                        |
-| **model_version**                  | VARCHAR(20)  | Version string (1.0.0)                            |
-| **model_type**                     | VARCHAR(50)  | LogisticRegression, RandomForest, XGBoost, etc.   |
-| **model_file_path**                | VARCHAR(500) | Path to serialized model file                     |
-| **model_file_hash**                | VARCHAR(64)  | SHA-256 of model file                             |
-| **model_size_kb**                  | INT          | Model file size                                   |
-| **trained_at**                     | TIMESTAMP    | When model was trained                            |
-| **training_dataset_size**          | INT          | Number of training samples                        |
-| **training_duration_seconds**      | INT          | Training time                                     |
-| **accuracy**                       | DECIMAL(5,4) | Model accuracy                                    |
-| **precision_score**                | DECIMAL(5,4) | Precision metric                                  |
-| **recall_score**                   | DECIMAL(5,4) | Recall metric                                     |
-| **f1_score**                       | DECIMAL(5,4) | F1 score                                          |
-| **auc_roc**                        | DECIMAL(5,4) | Area under ROC curve                              |
-| **metrics_by_class**               | JSON         | {Trusted: {precision, recall}, Suspicious: {...}} |
-| **confusion_matrix**               | JSON         | Confusion matrix data                             |
-| **feature_names**                  | JSON         | List of feature names used                        |
-| **feature_importance**             | JSON         | Feature importance scores                         |
-| **threshold_trusted**              | DECIMAL(5,2) | Score >= this = Trusted (default 70)              |
-| **threshold_suspicious**           | DECIMAL(5,2) | Score >= this = Suspicious (default 40)           |
-| **is_active**                      | BOOLEAN      | Currently accepting predictions                   |
-| **is_champion**                    | BOOLEAN      | Best performing model                             |
-| **deployed_at**                    | TIMESTAMP    | When deployed to production                       |
-| **deprecated_at**                  | TIMESTAMP    | When deprecated                                   |
-| **deprecation_reason**             | VARCHAR(255) | Why deprecated                                    |
-| **total_predictions**              | INT          | Total predictions made                            |
-| **correct_predictions**            | INT          | Correct predictions count                         |
-| **avg_inference_time_ms**          | DECIMAL(8,2) | Average prediction time                           |
-| **training_notes**                 | TEXT         | Training documentation                            |
-| **created_at**                     | TIMESTAMP    | Record creation                                   |
-| **created_by** (FK → police_users) | INT          | Who created/trained                               |
-
----
-
-## 7.2 ml_predictions — Prediction Logs
-
-**Meaning:**
-Logs all ML predictions for monitoring and retraining.
-
-**Purpose:**
-Track predictions, compare with ground truth, identify model drift.
-
-| Field                                 | Type         | Description                                    |
-| ------------------------------------- | ------------ | ---------------------------------------------- |
-| **prediction_id** (PK)                | CHAR(36)     | UUID - Unique prediction identifier            |
-| **report_id** (FK → incident_reports) | CHAR(36)     | Report that was scored                         |
-| **model_id** (FK → ml_models)         | INT          | Model that made prediction                     |
-| **feature_vector**                    | JSON         | Features used for prediction                   |
-| **predicted_score**                   | DECIMAL(5,2) | 0-100 trust score                              |
-| **predicted_class**                   | ENUM         | Trusted, Suspicious, False                     |
-| **confidence**                        | DECIMAL(5,4) | Model confidence                               |
-| **class_probabilities**               | JSON         | {Trusted: 0.75, Suspicious: 0.20, False: 0.05} |
-| **actual_class**                      | ENUM         | Ground truth (filled when police verifies)     |
-| **is_correct**                        | BOOLEAN      | Whether prediction was correct                 |
-| **inference_time_ms**                 | DECIMAL(8,2) | Prediction time                                |
-| **predicted_at**                      | TIMESTAMP    | When prediction was made                       |
-| **verified_at**                       | TIMESTAMP    | When ground truth was added                    |
-
----
-
-## 7.3 ml_training_data — Training Dataset
-
-**Meaning:**
-Curated training data for model retraining.
-
-**Purpose:**
-Maintains high-quality labeled data from police verifications.
-
-| Field                                 | Type         | Description                                         |
-| ------------------------------------- | ------------ | --------------------------------------------------- |
-| **training_id** (PK)                  | INT          | Unique training record ID                           |
-| **report_id** (FK → incident_reports) | CHAR(36)     | Source report                                       |
-| **feature_vector**                    | JSON         | Features extracted                                  |
-| **label**                             | ENUM         | Trusted, Suspicious, False                          |
-| **label_confidence**                  | DECIMAL(5,2) | Confidence in label (100 = police verified)         |
-| **labeled_by** (FK → police_users)    | INT          | Who labeled                                         |
-| **labeled_at**                        | TIMESTAMP    | When labeled                                        |
-| **label_source**                      | ENUM         | police_verification, expert_review, consensus, auto |
-| **dataset_split**                     | ENUM         | train, validation, test, holdout                    |
-| **assigned_to_split_at**              | TIMESTAMP    | When assigned to split                              |
-| **used_in_model_version**             | VARCHAR(20)  | Which model used this                               |
-| **used_at**                           | TIMESTAMP    | When used in training                               |
-| **is_high_quality**                   | BOOLEAN      | Quality flag                                        |
-| **quality_issues**                    | JSON         | Any data quality concerns                           |
-| **created_at**                        | TIMESTAMP    | Record creation                                     |
-
----
-
-# SECTION 8: HOTSPOT DETECTION & CLUSTERING
-
----
-
-## 8.1 hotspots — Detected Incident Clusters
-
-**Meaning:**
-Crime hotspots detected via trust-weighted DBSCAN clustering.
-
-**Purpose:**
-Identifies high-risk locations for police resource allocation.
-
-### Cluster Identification
-
-| Field                                     | Type     | Description                       |
-| ----------------------------------------- | -------- | --------------------------------- |
-| **hotspot_id** (PK)                       | INT      | Unique hotspot identifier         |
-| **cluster_label**                         | INT      | DBSCAN cluster label              |
-| **cluster_run_id** (FK → clustering_runs) | CHAR(36) | Which clustering run created this |
-
-### Spatial Data
-
-| Field                            | Type          | Description                        |
-| -------------------------------- | ------------- | ---------------------------------- |
-| **centroid_latitude**            | DECIMAL(10,8) | Cluster center latitude            |
-| **centroid_longitude**           | DECIMAL(11,8) | Cluster center longitude           |
-| **boundary_geojson**             | JSON          | Convex hull polygon around cluster |
-| **radius_meters**                | DECIMAL(10,2) | Approximate radius                 |
-| **area_sq_meters**               | DECIMAL(12,2) | Cluster area                       |
-| **district_id** (FK → districts) | TINYINT       | Primary district                   |
-| **sector_id** (FK → sectors)     | SMALLINT      | Primary sector                     |
-| **cell_id** (FK → cells)         | SMALLINT      | Primary cell                       |
-| **village_id** (FK → villages)   | INT           | Primary village                    |
-
-### Cluster Statistics
-
-| Field                       | Type          | Description                               |
-| --------------------------- | ------------- | ----------------------------------------- |
-| **report_count**            | INT           | Number of reports in cluster              |
-| **unique_devices**          | INT           | Unique reporting devices                  |
-| **avg_trust_score**         | DECIMAL(5,2)  | Average trust score                       |
-| **min_trust_score**         | DECIMAL(5,2)  | Minimum trust score                       |
-| **max_trust_score**         | DECIMAL(5,2)  | Maximum trust score                       |
-| **std_trust_score**         | DECIMAL(5,2)  | Standard deviation                        |
-| **weighted_trust_density**  | DECIMAL(10,4) | Trust-weighted density for prioritization |
-| **trusted_report_count**    | INT           | Trusted reports in cluster                |
-| **suspicious_report_count** | INT           | Suspicious reports in cluster             |
-| **false_report_count**      | INT           | False reports in cluster                  |
-| **police_verified_count**   | INT           | Police-verified reports                   |
-
-### Temporal Data
-
-| Field                    | Type      | Description                    |
-| ------------------------ | --------- | ------------------------------ |
-| **earliest_incident_at** | TIMESTAMP | First incident in cluster      |
-| **latest_incident_at**   | TIMESTAMP | Last incident in cluster       |
-| **time_span_hours**      | INT       | Duration of cluster activity   |
-| **peak_hour**            | TINYINT   | 0-23, hour with most incidents |
-| **peak_day_of_week**     | TINYINT   | 0=Sunday, 6=Saturday           |
-
-### Incident Analysis
-
-| Field                                               | Type         | Description                 |
-| --------------------------------------------------- | ------------ | --------------------------- |
-| **incident_type_distribution**                      | JSON         | {type_id: count, ...}       |
-| **dominant_incident_type_id** (FK → incident_types) | SMALLINT     | Most common type            |
-| **dominant_incident_pct**                           | DECIMAL(5,2) | Percentage of dominant type |
-
-### Risk Assessment
-
-| Field              | Type         | Description                        |
-| ------------------ | ------------ | ---------------------------------- |
-| **risk_level**     | ENUM         | low, medium, high, critical        |
-| **priority_score** | DECIMAL(5,2) | 0-100 composite priority score     |
-| **risk_factors**   | JSON         | Factors contributing to risk level |
-
-### DBSCAN Parameters
-
-| Field                     | Type          | Description                         |
-| ------------------------- | ------------- | ----------------------------------- |
-| **dbscan_epsilon_meters** | DECIMAL(10,2) | Epsilon parameter used              |
-| **dbscan_min_samples**    | INT           | Min samples parameter used          |
-| **trust_weight_enabled**  | BOOLEAN       | Whether trust weighting was applied |
-
-### Status & Response
-
-| Field                                          | Type         | Description                                       |
-| ---------------------------------------------- | ------------ | ------------------------------------------------- |
-| **is_active**                                  | BOOLEAN      | Hotspot still active                              |
-| **status**                                     | ENUM         | new, monitoring, responding, addressed, recurring |
-| **is_assigned**                                | BOOLEAN      | Has been assigned                                 |
-| **assigned_to_officer_id** (FK → police_users) | INT          | Assigned officer                                  |
-| **assigned_to_unit**                           | VARCHAR(100) | Assigned unit                                     |
-| **assigned_at**                                | TIMESTAMP    | When assigned                                     |
-| **is_addressed**                               | BOOLEAN      | Has been addressed                                |
-| **addressed_at**                               | TIMESTAMP    | When addressed                                    |
-| **addressed_by** (FK → police_users)           | INT          | Who addressed                                     |
-| **resolution_notes**                           | TEXT         | Resolution details                                |
-| **detected_at**                                | TIMESTAMP    | When hotspot was detected                         |
-| **updated_at**                                 | TIMESTAMP    | Last update                                       |
-| **last_report_added_at**                       | TIMESTAMP    | Last report added                                 |
-
----
-
-## 8.2 hotspot_reports — Bridge Table
-
-**Meaning:**
-Links reports to hotspot clusters.
-
-**Purpose:**
-Many-to-many relationship between reports and hotspots.
-
-| Field                                     | Type          | Description                        |
-| ----------------------------------------- | ------------- | ---------------------------------- |
-| **hotspot_id** (PK, FK → hotspots)        | INT           | Hotspot cluster                    |
-| **report_id** (PK, FK → incident_reports) | CHAR(36)      | Report in cluster                  |
-| **trust_weight**                          | DECIMAL(5,4)  | Report weight based on trust score |
-| **distance_to_centroid_meters**           | DECIMAL(10,2) | Distance from cluster center       |
-| **is_core_point**                         | BOOLEAN       | TRUE if DBSCAN core point          |
-| **added_at**                              | TIMESTAMP     | When added to hotspot              |
-
----
-
-## 8.3 hotspot_history — Hotspot Trends
-
-**Meaning:**
-Historical snapshots of hotspot metrics.
-
-**Purpose:**
-Track hotspot evolution over time.
-
-| Field                          | Type         | Description                  |
-| ------------------------------ | ------------ | ---------------------------- |
-| **history_id** (PK)            | INT          | Unique history record        |
-| **hotspot_id** (FK → hotspots) | INT          | Hotspot being tracked        |
-| **snapshot_date**              | DATE         | Date of snapshot             |
-| **report_count**               | INT          | Reports at this time         |
-| **avg_trust_score**            | DECIMAL(5,2) | Average trust score          |
-| **risk_level**                 | ENUM         | Risk level at snapshot       |
-| **priority_score**             | DECIMAL(5,2) | Priority score               |
-| **report_count_change**        | INT          | Change from previous         |
-| **trust_score_change**         | DECIMAL(5,2) | Score change                 |
-| **risk_level_changed**         | BOOLEAN      | Risk level changed           |
-| **trend_direction**            | ENUM         | improving, stable, worsening |
-| **created_at**                 | TIMESTAMP    | Snapshot time                |
-
----
-
-## 8.4 clustering_runs — Clustering Execution Logs
-
-**Meaning:**
-Logs each DBSCAN clustering execution.
-
-**Purpose:**
-Track clustering runs, parameters, and results.
-
-| Field                                | Type          | Description                  |
-| ------------------------------------ | ------------- | ---------------------------- |
-| **run_id** (PK)                      | CHAR(36)      | UUID - Unique run identifier |
-| **district_id** (FK → districts)     | TINYINT       | NULL = all districts         |
-| **epsilon_meters**                   | DECIMAL(10,2) | DBSCAN epsilon parameter     |
-| **min_samples**                      | INT           | DBSCAN min_samples parameter |
-| **trust_weight_enabled**             | BOOLEAN       | Trust weighting applied      |
-| **min_trust_score_threshold**        | DECIMAL(5,2)  | Minimum trust to include     |
-| **total_reports_processed**          | INT           | Total reports analyzed       |
-| **reports_after_filtering**          | INT           | Reports after trust filter   |
-| **date_range_start**                 | TIMESTAMP     | Report date range start      |
-| **date_range_end**                   | TIMESTAMP     | Report date range end        |
-| **clusters_found**                   | INT           | Number of clusters detected  |
-| **noise_points**                     | INT           | Reports not in any cluster   |
-| **avg_cluster_size**                 | DECIMAL(8,2)  | Average cluster size         |
-| **execution_time_seconds**           | DECIMAL(10,2) | Run duration                 |
-| **status**                           | ENUM          | running, completed, failed   |
-| **error_message**                    | TEXT          | Error if failed              |
-| **started_at**                       | TIMESTAMP     | Run start time               |
-| **completed_at**                     | TIMESTAMP     | Run completion time          |
-| **triggered_by** (FK → police_users) | INT           | NULL = scheduled             |
-
----
-
-# SECTION 9: POLICE USER MANAGEMENT
-
----
-
-## 9.1 police_users — Police Accounts
-
-**Meaning:**
-Police and admin user accounts for the dashboard.
-
-**Purpose:**
-Authentication, authorization, and jurisdiction management.
-
-### Authentication
-
-| Field             | Type         | Description            |
-| ----------------- | ------------ | ---------------------- |
-| **user_id** (PK)  | INT          | Unique user identifier |
-| **username**      | VARCHAR(50)  | Unique username        |
-| **email**         | VARCHAR(255) | Unique email address   |
-| **password_hash** | VARCHAR(255) | Bcrypt hashed password |
-
-### Personal Information
-
-| Field                  | Type         | Description                |
-| ---------------------- | ------------ | -------------------------- |
-| **full_name**          | VARCHAR(200) | Officer's full name        |
-| **badge_number**       | VARCHAR(50)  | Unique badge number        |
-| **rank**               | VARCHAR(50)  | Police rank                |
-| **phone_number**       | VARCHAR(20)  | Contact phone              |
-| **profile_photo_path** | VARCHAR(500) | Profile photo storage path |
-
-### Role & Permissions
-
-| Field           | Type | Description                                             |
-| --------------- | ---- | ------------------------------------------------------- |
-| **role**        | ENUM | super_admin, admin, commander, officer, analyst, viewer |
-| **permissions** | JSON | Granular permission flags                               |
-
-### Assignment & Jurisdiction
-
-| Field                                     | Type         | Description                      |
-| ----------------------------------------- | ------------ | -------------------------------- |
-| **assigned_district_id** (FK → districts) | TINYINT      | Primary assigned district        |
-| **assigned_sector_id** (FK → sectors)     | SMALLINT     | Primary assigned sector          |
-| **assigned_unit**                         | VARCHAR(100) | Police station/unit name         |
-| **jurisdiction_district_ids**             | JSON         | Array of accessible district IDs |
-| **can_access_all_districts**              | BOOLEAN      | Has national access              |
-
-### Account Status
-
-| Field                               | Type      | Description       |
-| ----------------------------------- | --------- | ----------------- |
-| **is_active**                       | BOOLEAN   | Account is active |
-| **is_verified**                     | BOOLEAN   | Account verified  |
-| **verified_at**                     | TIMESTAMP | When verified     |
-| **verified_by** (FK → police_users) | INT       | Who verified      |
-
-### Security
-
-| Field                       | Type         | Description           |
-| --------------------------- | ------------ | --------------------- |
-| **two_factor_enabled**      | BOOLEAN      | 2FA enabled           |
-| **two_factor_secret**       | VARCHAR(100) | TOTP secret           |
-| **two_factor_backup_codes** | JSON         | Backup codes          |
-| **password_changed_at**     | TIMESTAMP    | Last password change  |
-| **must_change_password**    | BOOLEAN      | Force password change |
-| **failed_login_attempts**   | TINYINT      | Failed login count    |
-| **account_locked_until**    | TIMESTAMP    | Lockout expiration    |
-| **last_failed_login_at**    | TIMESTAMP    | Last failed attempt   |
-
-### Activity
-
-| Field             | Type        | Description           |
-| ----------------- | ----------- | --------------------- |
-| **last_login_at** | TIMESTAMP   | Last successful login |
-| **last_login_ip** | VARCHAR(45) | Last login IP         |
-| **login_count**   | INT         | Total logins          |
-
-### Preferences
-
-| Field                        | Type | Description           |
-| ---------------------------- | ---- | --------------------- |
-| **preferred_language**       | ENUM | en                    |
-| **notification_preferences** | JSON | Notification settings |
-| **dashboard_settings**       | JSON | UI preferences        |
-
-### Timestamps
-
-| Field                              | Type      | Description         |
-| ---------------------------------- | --------- | ------------------- |
-| **created_at**                     | TIMESTAMP | Account creation    |
-| **updated_at**                     | TIMESTAMP | Last update         |
-| **created_by** (FK → police_users) | INT       | Who created account |
-
----
-
-## 9.2 police_sessions — Active Sessions
-
-**Meaning:**
-Active login sessions for security management.
-
-**Purpose:**
-Session tracking, token management, and security.
-
-| Field                           | Type         | Description               |
-| ------------------------------- | ------------ | ------------------------- |
-| **session_id** (PK)             | CHAR(36)     | UUID - Session identifier |
-| **user_id** (FK → police_users) | INT          | User who owns session     |
-| **token_hash**                  | VARCHAR(255) | Hashed session token      |
-| **refresh_token_hash**          | VARCHAR(255) | Hashed refresh token      |
-| **ip_address**                  | VARCHAR(45)  | Client IP address         |
-| **user_agent**                  | TEXT         | Browser/client info       |
-| **device_info**                 | JSON         | Device details            |
-| **is_active**                   | BOOLEAN      | Session is valid          |
-| **created_at**                  | TIMESTAMP    | Session start             |
-| **last_activity_at**            | TIMESTAMP    | Last activity             |
-| **expires_at**                  | TIMESTAMP    | Session expiration        |
-| **revoked_at**                  | TIMESTAMP    | If revoked, when          |
-| **revoked_reason**              | VARCHAR(100) | Why revoked               |
-
----
-
-# SECTION 10: NOTIFICATIONS
-
----
-
-## 10.1 notifications — Police Alerts
-
-**Meaning:**
-Notifications and alerts for police users.
-
-**Purpose:**
-Real-time alerting for new reports, hotspots, and assignments.
-
-| Field                                     | Type         | Description                                                                                                                                                        |
-| ----------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **notification_id** (PK)                  | INT          | Unique notification ID                                                                                                                                             |
-| **recipient_user_id** (FK → police_users) | INT          | Who receives notification                                                                                                                                          |
-| **notification_type**                     | ENUM         | new_report, high_trust_report, suspicious_report, hotspot_detected, hotspot_escalated, assignment, verification_needed, system_alert, model_update, weekly_summary |
-| **title**                                 | VARCHAR(200) | Notification title                                                                                                                                                 |
-| **message**                               | TEXT         | Notification message                                                                                                                                               |
-| **report_id** (FK → incident_reports)     | CHAR(36)     | Related report                                                                                                                                                     |
-| **hotspot_id** (FK → hotspots)            | INT          | Related hotspot                                                                                                                                                    |
-| **priority**                              | ENUM         | low, normal, high, urgent                                                                                                                                          |
-| **delivery_channels**                     | JSON         | ["web", "email", "push"]                                                                                                                                           |
-| **is_read**                               | BOOLEAN      | Has been read                                                                                                                                                      |
-| **read_at**                               | TIMESTAMP    | When read                                                                                                                                                          |
-| **is_dismissed**                          | BOOLEAN      | Has been dismissed                                                                                                                                                 |
-| **dismissed_at**                          | TIMESTAMP    | When dismissed                                                                                                                                                     |
-| **action_taken**                          | VARCHAR(100) | What action user took                                                                                                                                              |
-| **action_taken_at**                       | TIMESTAMP    | When action taken                                                                                                                                                  |
-| **created_at**                            | TIMESTAMP    | Notification created                                                                                                                                               |
-| **expires_at**                            | TIMESTAMP    | When notification expires                                                                                                                                          |
-
----
-
-# SECTION 11: ANALYTICS & STATISTICS
-
----
-
-## 11.1 daily_statistics — Aggregated Daily Metrics
-
-**Meaning:**
-Pre-aggregated daily metrics for fast dashboard queries.
-
-**Purpose:**
-Performance optimization for analytics dashboards.
-
-| Field                            | Type     | Description           |
-| -------------------------------- | -------- | --------------------- |
-| **stat_id** (PK)                 | INT      | Unique stat record    |
-| **stat_date**                    | DATE     | Date of statistics    |
-| **district_id** (FK → districts) | TINYINT  | NULL = national       |
-| **sector_id** (FK → sectors)     | SMALLINT | NULL = district level |
-
-### Report Metrics
-
-| Field                  | Type         | Description               |
-| ---------------------- | ------------ | ------------------------- |
-| **total_reports**      | INT          | Total reports             |
-| **trusted_reports**    | INT          | Trusted classification    |
-| **suspicious_reports** | INT          | Suspicious classification |
-| **false_reports**      | INT          | False classification      |
-| **pending_reports**    | INT          | Pending review            |
-| **avg_trust_score**    | DECIMAL(5,2) | Average ML trust score    |
-| **median_trust_score** | DECIMAL(5,2) | Median ML trust score     |
-
-### Evidence Metrics
-
-| Field                  | Type | Description         |
-| ---------------------- | ---- | ------------------- |
-| **reports_with_photo** | INT  | Reports with photos |
-| **reports_with_video** | INT  | Reports with videos |
-
-### Verification Metrics
-
-| Field                           | Type         | Description               |
-| ------------------------------- | ------------ | ------------------------- |
-| **reports_police_verified**     | INT          | Police verified count     |
-| **reports_confirmed**           | INT          | Confirmed as real         |
-| **reports_rejected**            | INT          | Rejected as false         |
-| **verification_rate**           | DECIMAL(5,2) | Percentage verified       |
-| **avg_verification_time_hours** | DECIMAL(8,2) | Average verification time |
-
-### Hotspot Metrics
-
-| Field                 | Type | Description         |
-| --------------------- | ---- | ------------------- |
-| **active_hotspots**   | INT  | Currently active    |
-| **new_hotspots**      | INT  | Newly detected      |
-| **resolved_hotspots** | INT  | Resolved today      |
-| **critical_hotspots** | INT  | Critical risk level |
-
-### Device Metrics
-
-| Field                        | Type         | Description              |
-| ---------------------------- | ------------ | ------------------------ |
-| **unique_reporting_devices** | INT          | Unique devices reporting |
-| **new_devices**              | INT          | First-time devices       |
-| **blocked_devices**          | INT          | Blocked devices          |
-| **avg_device_trust_score**   | DECIMAL(5,2) | Average device trust     |
-
-### Response Metrics
-
-| Field                         | Type         | Description             |
-| ----------------------------- | ------------ | ----------------------- |
-| **reports_assigned**          | INT          | Assigned to officers    |
-| **reports_resolved**          | INT          | Resolved today          |
-| **avg_resolution_time_hours** | DECIMAL(8,2) | Average resolution time |
-
-### Incident Analysis
-
-| Field                                          | Type      | Description                |
-| ---------------------------------------------- | --------- | -------------------------- |
-| **incident_type_counts**                       | JSON      | {type_id: count, ...}      |
-| **top_incident_type_id** (FK → incident_types) | SMALLINT  | Most common type           |
-| **calculated_at**                              | TIMESTAMP | When stats were calculated |
-
----
-
-## 11.2 incident_type_trends — Weekly Trends
-
-**Meaning:**
-Weekly trends by incident type.
-
-**Purpose:**
-Trend analysis and early warning detection.
-
-| Field                                      | Type         | Description                    |
-| ------------------------------------------ | ------------ | ------------------------------ |
-| **trend_id** (PK)                          | INT          | Unique trend record            |
-| **incident_type_id** (FK → incident_types) | SMALLINT     | Incident type                  |
-| **district_id** (FK → districts)           | TINYINT      | NULL = national                |
-| **week_start_date**                        | DATE         | Week start                     |
-| **week_end_date**                          | DATE         | Week end                       |
-| **year_week**                              | VARCHAR(7)   | YYYY-WW format                 |
-| **report_count**                           | INT          | Reports this week              |
-| **trusted_count**                          | INT          | Trusted reports                |
-| **suspicious_count**                       | INT          | Suspicious reports             |
-| **false_count**                            | INT          | False reports                  |
-| **avg_trust_score**                        | DECIMAL(5,2) | Average trust score            |
-| **police_verified_count**                  | INT          | Police verified                |
-| **prev_week_count**                        | INT          | Previous week count            |
-| **count_change**                           | INT          | Change from previous           |
-| **count_change_pct**                       | DECIMAL(6,2) | Percentage change              |
-| **trend_direction**                        | ENUM         | increasing, stable, decreasing |
-| **associated_hotspots**                    | INT          | Related hotspots               |
-| **calculated_at**                          | TIMESTAMP    | Calculation time               |
-
----
-
-# SECTION 12: PUBLIC COMMUNITY SAFETY MAP
-
----
-
-## 12.1 public_safety_zones — Anonymized Public Data
-
-**Meaning:**
-Anonymized, aggregated safety data for public map.
-
-**Purpose:**
-Privacy-preserving public safety visualization.
-
-| Field                            | Type         | Description                           |
-| -------------------------------- | ------------ | ------------------------------------- |
-| **zone_id** (PK)                 | INT          | Unique zone identifier                |
-| **zone_type**                    | ENUM         | grid, sector, cell, custom            |
-| **zone_geometry**                | JSON         | GeoJSON polygon                       |
-| **district_id** (FK → districts) | TINYINT      | District reference                    |
-| **sector_id** (FK → sectors)     | SMALLINT     | Sector reference                      |
-| **cell_id** (FK → cells)         | SMALLINT     | Cell reference                        |
-| **grid_row**                     | INT          | Grid row if grid type                 |
-| **grid_col**                     | INT          | Grid column if grid type              |
-| **grid_size_meters**             | INT          | Grid cell size                        |
-| **period_start**                 | DATE         | Period start date                     |
-| **period_end**                   | DATE         | Period end date                       |
-| **period_type**                  | ENUM         | daily, weekly, monthly                |
-| **incident_count**               | INT          | Only shown if >= threshold            |
-| **safety_score**                 | DECIMAL(5,2) | 0-100, higher = safer                 |
-| **safety_level**                 | ENUM         | safe, moderate, elevated, high_risk   |
-| **incident_breakdown**           | JSON         | {category_name: count} - no specifics |
-| **top_concern**                  | VARCHAR(100) | Most common category name             |
-| **trend_vs_prev_period**         | ENUM         | improving, stable, worsening          |
-| **display_color**                | VARCHAR(7)   | Hex color for map                     |
-| **is_visible**                   | BOOLEAN      | Show on public map                    |
-| **min_display_threshold**        | INT          | Min incidents to show (privacy)       |
-| **last_updated**                 | TIMESTAMP    | Last calculation                      |
-
----
-
-# SECTION 13: SYSTEM CONFIGURATION
-
----
-
-## 13.1 system_settings — Application Configuration
-
-**Meaning:**
-Centralized application configuration settings.
-
-**Purpose:**
-Dynamic configuration without code changes.
-
-| Field                              | Type         | Description                                                                  |
-| ---------------------------------- | ------------ | ---------------------------------------------------------------------------- |
-| **setting_id** (PK)                | INT          | Unique setting ID                                                            |
-| **setting_category**               | ENUM         | general, ml, verification, hotspot, notification, security, privacy, display |
-| **setting_key**                    | VARCHAR(100) | Setting identifier                                                           |
-| **setting_value**                  | JSON         | Setting value                                                                |
-| **value_type**                     | ENUM         | string, number, boolean, json, array                                         |
-| **display_name**                   | VARCHAR(200) | Human-readable name                                                          |
-| **description**                    | TEXT         | Setting description                                                          |
-| **validation_rules**               | JSON         | min, max, pattern, etc.                                                      |
-| **default_value**                  | JSON         | Default value                                                                |
-| **requires_admin**                 | BOOLEAN      | Admin only setting                                                           |
-| **is_sensitive**                   | BOOLEAN      | Masked in logs                                                               |
-| **is_active**                      | BOOLEAN      | Setting is active                                                            |
-| **updated_at**                     | TIMESTAMP    | Last update                                                                  |
-| **updated_by** (FK → police_users) | INT          | Who updated                                                                  |
-
----
-
-# SECTION 14: AUDIT & ACTIVITY LOGGING
-
----
-
-## 14.1 activity_logs — User Activity Audit
-
-**Meaning:**
-Complete audit trail of police user actions.
-
-**Purpose:**
-Security monitoring, compliance, and accountability.
-
-| Field                                    | Type         | Description                                                               |
-| ---------------------------------------- | ------------ | ------------------------------------------------------------------------- |
-| **log_id** (PK)                          | BIGINT       | Unique log ID                                                             |
-| **user_id** (FK → police_users)          | INT          | NULL for system actions                                                   |
-| **user_type**                            | ENUM         | police, system, api                                                       |
-| **action_type**                          | VARCHAR(50)  | Action performed                                                          |
-| **action_category**                      | ENUM         | auth, report, hotspot, user_management, settings, ml, data_export, system |
-| **action_description**                   | VARCHAR(500) | Action details                                                            |
-| **report_id** (FK → incident_reports)    | CHAR(36)     | Related report                                                            |
-| **hotspot_id** (FK → hotspots)           | INT          | Related hotspot                                                           |
-| **affected_user_id** (FK → police_users) | INT          | User affected                                                             |
-| **affected_table**                       | VARCHAR(100) | Table affected                                                            |
-| **affected_record_id**                   | VARCHAR(100) | Record affected                                                           |
-| **old_values**                           | JSON         | Previous values                                                           |
-| **new_values**                           | JSON         | New values                                                                |
-| **ip_address**                           | VARCHAR(45)  | Client IP                                                                 |
-| **user_agent**                           | TEXT         | Browser/client                                                            |
-| **session_id**                           | CHAR(36)     | Session ID                                                                |
-| **was_successful**                       | BOOLEAN      | Action succeeded                                                          |
-| **failure_reason**                       | TEXT         | Why it failed                                                             |
-| **created_at**                           | TIMESTAMP    | When action occurred                                                      |
-
----
-
-## 14.2 data_change_audit — Data Change Tracking
-
-**Meaning:**
-Detailed audit of all data changes (INSERT, UPDATE, DELETE).
-
-**Purpose:**
-Complete data change history for compliance.
-
-| Field                              | Type         | Description                  |
-| ---------------------------------- | ------------ | ---------------------------- |
-| **audit_id** (PK)                  | BIGINT       | Unique audit ID              |
-| **table_name**                     | VARCHAR(100) | Table that changed           |
-| **record_id**                      | VARCHAR(100) | Record that changed          |
-| **operation**                      | ENUM         | INSERT, UPDATE, DELETE       |
-| **old_values**                     | JSON         | Previous values              |
-| **new_values**                     | JSON         | New values                   |
-| **changed_columns**                | JSON         | List of changed columns      |
-| **changed_by** (FK → police_users) | INT          | Who made change              |
-| **changed_by_type**                | ENUM         | police, system, api, trigger |
-| **ip_address**                     | VARCHAR(45)  | Client IP                    |
-| **application_context**            | VARCHAR(100) | Which app component          |
-| **changed_at**                     | TIMESTAMP    | When changed                 |
-
----
-
-# SECTION 15: USER FEEDBACK
-
----
-
-## 15.1 app_feedback — Anonymous App Feedback
-
-**Meaning:**
-Anonymous feedback from mobile app users.
-
-**Purpose:**
-Collect user feedback for app improvement.
-
-| Field                                         | Type         | Description                                                                                       |
-| --------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------- |
-| **feedback_id** (PK)                          | INT          | Unique feedback ID                                                                                |
-| **device_id** (FK → devices)                  | CHAR(36)     | Optional device reference                                                                         |
-| **feedback_type**                             | ENUM         | bug_report, feature_request, usability_issue, performance_issue, content_issue, compliment, other |
-| **feedback_text**                             | TEXT         | Feedback content                                                                                  |
-| **rating**                                    | TINYINT      | 1-5 star rating                                                                                   |
-| **app_version**                               | VARCHAR(20)  | App version                                                                                       |
-| **platform**                                  | ENUM         | android, ios                                                                                      |
-| **os_version**                                | VARCHAR(30)  | OS version                                                                                        |
-| **screen_name**                               | VARCHAR(100) | Screen where submitted                                                                            |
-| **related_report_id** (FK → incident_reports) | CHAR(36)     | Related report                                                                                    |
-| **attachment_count**                          | TINYINT      | Screenshots attached                                                                              |
-| **is_reviewed**                               | BOOLEAN      | Has been reviewed                                                                                 |
-| **reviewed_at**                               | TIMESTAMP    | When reviewed                                                                                     |
-| **reviewed_by** (FK → police_users)           | INT          | Who reviewed                                                                                      |
-| **review_notes**                              | TEXT         | Review comments                                                                                   |
-| **review_status**                             | ENUM         | new, acknowledged, investigating, resolved, wont_fix                                              |
-| **requires_followup**                         | BOOLEAN      | Needs follow-up                                                                                   |
-| **followup_notes**                            | TEXT         | Follow-up details                                                                                 |
-| **created_at**                                | TIMESTAMP    | Submission time                                                                                   |
-
----
-
-## 15.2 feedback_attachments — Feedback Screenshots
-
-**Meaning:**
-Screenshots and files attached to feedback.
-
-**Purpose:**
-Visual context for bug reports and issues.
-
-| Field                               | Type         | Description          |
-| ----------------------------------- | ------------ | -------------------- |
-| **attachment_id** (PK)              | INT          | Unique attachment ID |
-| **feedback_id** (FK → app_feedback) | INT          | Parent feedback      |
-| **file_name**                       | VARCHAR(255) | Original file name   |
-| **file_path**                       | VARCHAR(500) | Storage path         |
-| **file_size_bytes**                 | INT          | File size            |
-| **mime_type**                       | VARCHAR(100) | MIME type            |
-| **uploaded_at**                     | TIMESTAMP    | Upload time          |
-
----
-
-# SECTION 16: API MANAGEMENT
-
----
-
-## 16.1 api_keys — API Authentication
-
-**Meaning:**
-API keys for external system integrations.
-
-**Purpose:**
-Secure API access management.
-
-| Field                                 | Type         | Description                       |
-| ------------------------------------- | ------------ | --------------------------------- |
-| **key_id** (PK)                       | INT          | Unique key ID                     |
-| **key_name**                          | VARCHAR(100) | Key name/description              |
-| **key_hash**                          | VARCHAR(255) | Hashed API key                    |
-| **key_prefix**                        | VARCHAR(10)  | First 10 chars for identification |
-| **owner_user_id** (FK → police_users) | INT          | Key owner                         |
-| **owner_description**                 | VARCHAR(255) | Owner details                     |
-| **permissions**                       | JSON         | Allowed endpoints/actions         |
-| **rate_limit_per_minute**             | INT          | Rate limit                        |
-| **allowed_ips**                       | JSON         | IP whitelist                      |
-| **allowed_districts**                 | JSON         | Data access restrictions          |
-| **is_active**                         | BOOLEAN      | Key is active                     |
-| **last_used_at**                      | TIMESTAMP    | Last use time                     |
-| **total_requests**                    | BIGINT       | Total API calls                   |
-| **created_at**                        | TIMESTAMP    | Key creation                      |
-| **expires_at**                        | TIMESTAMP    | Key expiration                    |
-| **revoked_at**                        | TIMESTAMP    | If revoked, when                  |
-| **revoked_reason**                    | VARCHAR(255) | Why revoked                       |
-
----
-
-## 16.2 api_request_logs — API Request Logging
-
-**Meaning:**
-Logs API requests for monitoring and debugging.
-
-**Purpose:**
-API usage tracking and troubleshooting.
-
-| Field                          | Type         | Description                   |
-| ------------------------------ | ------------ | ----------------------------- |
-| **log_id** (PK)                | BIGINT       | Unique log ID                 |
-| **api_key_id** (FK → api_keys) | INT          | API key used                  |
-| **endpoint**                   | VARCHAR(255) | API endpoint called           |
-| **method**                     | ENUM         | GET, POST, PUT, PATCH, DELETE |
-| **request_params**             | JSON         | Request parameters            |
-| **response_status**            | INT          | HTTP status code              |
-| **response_time_ms**           | INT          | Response time                 |
-| **ip_address**                 | VARCHAR(45)  | Client IP                     |
-| **user_agent**                 | VARCHAR(500) | Client identifier             |
-| **had_error**                  | BOOLEAN      | Error occurred                |
-| **error_message**              | TEXT         | Error details                 |
-| **requested_at**               | TIMESTAMP    | Request time                  |
-
----
-
-# RELATIONSHIP SUMMARY
-
-### Geographic Hierarchy
-
-- One province → many districts
-- One district → many sectors
-- One sector → many cells
-- One cell → many villages
-
-### Incident Taxonomy
-
-- One incident_category → many incident_types
-
-### Core Reporting
-
-- One device → many reports
-- One device → many device_trust_history records
-- One report → many evidence files
-- One report → one ML prediction result
-- One report → many rule_execution_logs
-- One report → zero or one police review
-
-### Hotspot Detection
-
-- One hotspot → many reports
-- One report → zero or many hotspots
-- hotspot_reports links reports to hotspots (many-to-many)
-- One hotspot → many hotspot_history records
-- One clustering_run → many hotspots
-
-### Machine Learning
-
-- One ml_model → many ml_predictions
-- One ml_model → many ml_training_data records
-
-### Police & Authentication
-
-- One police_user → many police_sessions
-- One police_user → many notifications
-- One police_user → many activity_logs
-- One police_user → many api_keys
-- One api_key → many api_request_logs
-
-### Feedback
-
-- One app_feedback → many feedback_attachments
-
-### Verification Rules
-
-- One verification_rule → many rule_execution_logs
-
----
-
-# DATA FLOWS
-
-## 1. Incident Report Submission Flow
+### How ML Enhances These Rules
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Mobile    │────►│   Report    │────►│   Evidence  │────►│   Rule      │
-│    App      │     │   Created   │     │   Uploaded  │     │   Check     │
-└─────────────┘     └─────────────┘     └─────────────┘     └──────┬──────┘
-                                                                    │
-                    ┌─────────────┐     ┌─────────────┐     ┌──────▼──────┐
-                    │   Ready     │◄────│   Trust     │◄────│    ML       │
-                    │ for Review  │     │Classification│    │  Scoring    │
-                    └──────┬──────┘     └─────────────┘     └─────────────┘
-                           │
-                    ┌──────▼──────┐     ┌─────────────┐     ┌─────────────┐
-                    │   Police    │────►│   Device    │────►│  Training   │
-                    │   Review    │     │Score Update │     │    Data     │
-                    └─────────────┘     └─────────────┘     └─────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                    REPORT SUBMISSION FLOW                           │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│   CITIZEN SUBMITS REPORT                                            │
+│            │                                                        │
+│            ▼                                                        │
+│   ┌─────────────────────────────────────────────────────────────┐   │
+│   │         STEP 1: 3-RULE VERIFICATION (Hardcoded)             │   │
+│   ├─────────────────────────────────────────────────────────────┤   │
+│   │  Rule 1: Location Check                                     │   │
+│   │          ├── GPS within Rwanda boundaries?                  │   │
+│   │          └── Location accuracy ≤ 100 meters?                │   │
+│   │                                                             │   │
+│   │  Rule 2: Motion Sensor Check                                │   │
+│   │          ├── Accelerometer data present?                    │   │
+│   │          └── Motion score ≥ 30?                             │   │
+│   │                                                             │   │
+│   │  Rule 3: Duplicate Detection                                │   │
+│   │          ├── Similar report from same device? (reject)      │   │
+│   │          └── Similar reports nearby? (group into case)      │   │
+│   │                                                             │   │
+│   │  RESULT: Pass all 3? → Continue to ML analysis              │   │
+│   │          Fail any? → Flag for review or reject              │   │
+│   └─────────────────────────────────────────────────────────────┘   │
+│            │                                                        │
+│            ▼                                                        │
+│   ┌─────────────────────────────────────────────────────────────┐   │
+│   │         STEP 2: MACHINE LEARNING ANALYSIS                   │   │
+│   ├─────────────────────────────────────────────────────────────┤   │
+│   │                                                             │   │
+│   │  ML MODEL receives all data from 3 rules and analyzes:      │   │
+│   │                                                             │   │
+│   │  📍 Location Pattern Analysis:                               │   │
+│   │     • Learns GPS spoofing patterns (fake locations)         │   │
+│   │     • Identifies areas with genuine vs suspicious reports   │   │
+│   │     • Detects impossible location jumps (teleportation)     │   │
+│   │                                                             │   │
+│   │  📱 Motion Pattern Analysis:                                 │   │
+│   │     • Learns authentic human device movement signatures     │   │
+│   │     • Detects bot/automated submission patterns             │   │
+│   │     • Identifies scripted motion data                       │   │
+│   │                                                             │   │
+│   │  🔗 Clustering Intelligence:                                 │   │
+│   │     • Improves grouping of related reports                  │   │
+│   │     • Learns incident type patterns per location            │   │
+│   │     • Predicts likely true incidents vs false reports       │   │
+│   │                                                             │   │
+│   │  OUTPUT:                                                    │   │
+│   │     • ml_trust_score (0.00 - 1.00)                          │   │
+│   │     • priority_level (low/medium/high/critical)             │   │
+│   │     • anomaly_flags (suspicious patterns detected)          │   │
+│   │     • cluster_confidence (how certain reports belong)       │   │
+│   └─────────────────────────────────────────────────────────────┘   │
+│            │                                                        │
+│            ▼                                                        │
+│   ┌─────────────────────────────────────────────────────────────┐   │
+│   │         STEP 3: FINAL PROCESSING                            │   │
+│   ├─────────────────────────────────────────────────────────────┤   │
+│   │                                                             │   │
+│   │  • Report stored with ML scores                             │   │
+│   │  • Linked to Unified Case (grouped with similar reports)    │   │
+│   │  • Priority assigned based on ML prediction                 │   │
+│   │  • Police dashboard shows case ordered by priority          │   │
+│   │                                                             │   │
+│   │  CITIZEN VIEW: "Report received" (doesn't know about ML)    │   │
+│   │  POLICE VIEW: Full ML analysis + all grouped evidence       │   │
+│   └─────────────────────────────────────────────────────────────┘   │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-## 2. Hybrid Verification Pipeline
+### ML Training Process
+
+| Phase                   | Description                                                          |
+| ----------------------- | -------------------------------------------------------------------- |
+| **Initial Training**    | Model trained on historical reports where police confirmed validity  |
+| **Continuous Learning** | Each police decision (verified/rejected) improves the model          |
+| **Feature Inputs**      | Location data, motion sensor readings, time patterns, device history |
+| **Model Output**        | Trust score, priority level, anomaly flags, cluster confidence       |
+
+### What ML Learns Over Time
+
+1. **Location Patterns**: Which areas have genuine reports vs where fake reports originate
+2. **Time Patterns**: When genuine incidents typically occur vs suspicious timing
+3. **Device Behavior**: How legitimate reporters use their devices vs bots
+4. **Incident Correlations**: What incident types occur together in which locations
+
+---
+
+## 15 Tables Summary
+
+| #   | Table Name            | Purpose                                                            | Category  |
+| --- | --------------------- | ------------------------------------------------------------------ | --------- |
+| 1   | `devices`             | Anonymous reporter devices with trust scores                       | Core      |
+| 2   | `locations`           | Rwanda geography hierarchy (Province→District→Sector→Cell→Village) | Core      |
+| 3   | `incident_types`      | Incident taxonomy (categories + types)                             | Core      |
+| 4   | `unified_cases`       | Grouped incidents for police investigation                         | Core      |
+| 5   | `incident_reports`    | Individual citizen submissions                                     | Core      |
+| 6   | `report_evidence`     | Media files (photos, videos, audio)                                | Core      |
+| 7   | `ml_models`           | Trained ML models for verification                                 | ML        |
+| 8   | `ml_predictions`      | ML analysis results per report                                     | ML        |
+| 9   | `police_users`        | Police authentication and roles                                    | Police    |
+| 10  | `notifications`       | Alerts for police officers                                         | Police    |
+| 11  | `hotspots`            | Crime cluster detection                                            | Analytics |
+| 12  | `daily_statistics`    | Pre-aggregated analytics                                           | Analytics |
+| 13  | `public_safety_zones` | Anonymized public safety map                                       | Public    |
+| 14  | `system_settings`     | Application configuration                                          | System    |
+| 15  | `activity_logs`       | Complete audit trail                                               | System    |
+
+---
+
+## Table Relationships Summary
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         HYBRID VERIFICATION                              │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  ┌─────────────┐                                                        │
-│  │   Report    │                                                        │
-│  │  Received   │                                                        │
-│  └──────┬──────┘                                                        │
-│         │                                                               │
-│         ▼                                                               │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │                    STAGE 1: RULE-BASED                          │   │
-│  │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐            │   │
-│  │  │  GPS    │  │ Motion  │  │  Time   │  │Evidence │            │   │
-│  │  │ Check   │  │ Check   │  │ Check   │  │ Check   │            │   │
-│  │  └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘            │   │
-│  │       └──────────┬─┴──────────┬─┴──────────┬─┘                 │   │
-│  │                  ▼            ▼            ▼                    │   │
-│  │              rule_execution_logs                                │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-│         │                                                               │
-│         ▼ (if passed)                                                   │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │                    STAGE 2: ML SCORING                           │   │
-│  │  ┌─────────────────┐    ┌─────────────────┐                     │   │
-│  │  │ Feature Vector  │───►│   ML Model      │                     │   │
-│  │  │   Extraction    │    │  (RandomForest) │                     │   │
-│  │  └─────────────────┘    └────────┬────────┘                     │   │
-│  │                                  ▼                               │   │
-│  │                         ml_predictions                           │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-│         │                                                               │
-│         ▼                                                               │
-│  ┌─────────────┐                                                        │
-│  │Trust Class: │  Trusted (≥70) │ Suspicious (40-69) │ False (<40)     │
-│  └─────────────┘                                                        │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+                            ┌─────────────────┐
+                            │   ml_models     │
+                            │ (trained models)│
+                            └────────┬────────┘
+                                     │ uses
+                                     ▼
+┌──────────┐    submits    ┌─────────────────┐    analyzed by    ┌────────────────┐
+│ devices  │──────────────►│ incident_reports│◄─────────────────►│ ml_predictions │
+│(anon ID) │               │ (3-rule checked)│                   │ (ML scores)    │
+└──────────┘               └────────┬────────┘                   └────────────────┘
+                                    │
+                          ┌─────────┼─────────┐
+                          │         │         │
+                          ▼         ▼         ▼
+              ┌───────────────┐ ┌───────────────┐ ┌───────────────────┐
+              │ unified_cases │ │report_evidence│ │    locations      │
+              │(grouped cases)│ │(photos/videos)│ │(Rwanda geography) │
+              └───────┬───────┘ └───────────────┘ └───────────────────┘
+                      │
+         ┌────────────┼────────────┬────────────┐
+         ▼            ▼            ▼            ▼
+┌─────────────┐ ┌───────────┐ ┌──────────┐ ┌────────────────────┐
+│police_users │ │ hotspots  │ │incident_ │ │ public_safety_zones│
+│(view cases) │ │(clusters) │ │  types   │ │   (public map)     │
+└──────┬──────┘ └───────────┘ └──────────┘ └────────────────────┘
+       │
+       ▼
+┌──────────────┐     ┌─────────────────┐     ┌───────────────┐
+│notifications │     │daily_statistics │     │ activity_logs │
+│  (alerts)    │     │  (analytics)    │     │   (audit)     │
+└──────────────┘     └─────────────────┘     └───────────────┘
 
-## 3. Hotspot Detection Flow
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  Scheduled  │────►│   Filter    │────►│   DBSCAN    │
-│   Trigger   │     │  by Trust   │     │  Clustering │
-└─────────────┘     └─────────────┘     └──────┬──────┘
-                                               │
-┌─────────────┐     ┌─────────────┐     ┌──────▼──────┐
-│  Dashboard  │◄────│   Assign    │◄────│   Create    │
-│   Display   │     │   Priority  │     │   Hotspots  │
-└─────────────┘     └─────────────┘     └─────────────┘
-```
-
-## 4. ML Model Retraining Cycle
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Police    │────►│  Training   │────►│   Train     │
-│   Reviews   │     │    Data     │     │  New Model  │
-└─────────────┘     └─────────────┘     └──────┬──────┘
-                                               │
-┌─────────────┐     ┌─────────────┐     ┌──────▼──────┐
-│   Deploy    │◄────│   A/B Test  │◄────│   Evaluate  │
-│   Champion  │     │   Compare   │     │   Metrics   │
-└─────────────┘     └─────────────┘     └─────────────┘
-```
-
-## 5. Device Trust Score Evolution
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   New       │────►│   Report    │────►│   Police    │
-│  Device (50)│     │  Submitted  │     │   Review    │
-└─────────────┘     └─────────────┘     └──────┬──────┘
-                                               │
-                    ┌──────────────────────────┼──────────────────────────┐
-                    │                          │                          │
-              ┌─────▼─────┐            ┌───────▼───────┐           ┌─────▼─────┐
-              │ Confirmed │            │    Needs      │           │  Rejected │
-              │   (+10)   │            │Investigation  │           │   (-15)   │
-              └─────┬─────┘            └───────┬───────┘           └─────┬─────┘
-                    │                          │                          │
-                    └──────────────────────────┼──────────────────────────┘
-                                               │
-                                        ┌──────▼──────┐
-                                        │device_trust_│
-                                        │  history    │
-                                        └─────────────┘
-```
-
-## 6. Police Dashboard Notification Flow
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Event     │────►│   Check     │────►│   Create    │
-│  Triggered  │     │Jurisdiction │     │Notification │
-└─────────────┘     └─────────────┘     └──────┬──────┘
-                                               │
-┌─────────────┐     ┌─────────────┐     ┌──────▼──────┐
-│   Email     │◄────│   Push      │◄────│   Deliver   │
-│ (optional)  │     │   Notify    │     │   Channels  │
-└─────────────┘     └─────────────┘     └─────────────┘
-```
-
-## 7. Public Safety Map Generation
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  Trusted    │────►│  Aggregate  │────►│  Apply      │
-│  Reports    │     │   by Zone   │     │  Threshold  │
-└─────────────┘     └─────────────┘     └──────┬──────┘
-                                               │
-┌─────────────┐     ┌─────────────┐     ┌──────▼──────┐
-│   Public    │◄────│  Calculate  │◄────│  Anonymize  │
-│    Map      │     │Safety Score │     │    Data     │
-└─────────────┘     └─────────────┘     └─────────────┘
-
-Privacy Rules:
-• Minimum 3 incidents per zone
-• No individual report details
-• Category counts only
-• No device information
+                     ┌─────────────────┐
+                     │ system_settings │
+                     │  (config)       │
+                     └─────────────────┘
 ```
 
 ---
 
-# TABLE COUNT SUMMARY
+# TABLE 1: devices
 
-| Section       | Tables | Purpose                         |
-| ------------- | ------ | ------------------------------- |
-| Core Device   | 2      | Device tracking and history     |
-| Geography     | 5      | Rwanda administrative hierarchy |
-| Taxonomy      | 2      | Incident classification         |
-| Reports       | 1      | Core transaction table          |
-| Evidence      | 1      | File metadata storage           |
-| Rules Engine  | 2      | Rule-based verification         |
-| ML System     | 3      | Machine learning pipeline       |
-| Hotspots      | 4      | Cluster detection and tracking  |
-| Police Users  | 2      | Authentication and sessions     |
-| Notifications | 1      | Alert system                    |
-| Analytics     | 2      | Pre-aggregated statistics       |
-| Public Map    | 1      | Privacy-preserving public data  |
-| System Config | 1      | Application settings            |
-| Audit         | 2      | Complete audit trail            |
-| Feedback      | 2      | User feedback collection        |
-| API           | 2      | External integrations           |
+## Anonymous Reporter Devices
 
-**Total: 33 Tables**
+**Purpose:** Tracks anonymous device behavior and trust history. No personal data stored.
+
+| Field                   | Type                   | Description                               |
+| ----------------------- | ---------------------- | ----------------------------------------- |
+| **device_id** (PK)      | CHAR(36)               | UUID - Unique device identifier           |
+| **device_fingerprint**  | VARCHAR(255)           | SHA-256 hash of hardware (non-reversible) |
+| **platform**            | ENUM('android', 'ios') | Mobile platform                           |
+| **app_version**         | VARCHAR(20)            | App version installed                     |
+| **os_version**          | VARCHAR(30)            | Operating system version                  |
+| **device_language**     | VARCHAR(10)            | Preferred language                        |
+| **current_trust_score** | DECIMAL(5,2)           | Trust score (0-100), default 50           |
+| **total_reports**       | INT DEFAULT 0          | Total reports submitted                   |
+| **verified_reports**    | INT DEFAULT 0          | Reports confirmed as valid                |
+| **false_reports**       | INT DEFAULT 0          | Reports confirmed as false                |
+| **is_blocked**          | BOOLEAN DEFAULT FALSE  | Device blocked from reporting             |
+| **block_reason**        | VARCHAR(255)           | Reason for blocking                       |
+| **blocked_at**          | TIMESTAMP              | When blocked                              |
+| **blocked_by**          | INT                    | FK → police_users                         |
+| **push_token**          | VARCHAR(500)           | Encrypted push notification token         |
+| **first_seen_at**       | TIMESTAMP              | First activity                            |
+| **last_active_at**      | TIMESTAMP              | Last activity                             |
+
+**Indexes:**
+
+- PRIMARY KEY (device_id)
+- UNIQUE (device_fingerprint)
+- INDEX (current_trust_score)
+- INDEX (is_blocked)
+
 ---
+
+# TABLE 2: locations
+
+## Rwanda Administrative Geography (Hierarchical)
+
+**Purpose:** Single self-referential table for all Rwanda geography levels.
+
+| Field                | Type                                                      | Description                          |
+| -------------------- | --------------------------------------------------------- | ------------------------------------ |
+| **location_id** (PK) | INT AUTO_INCREMENT                                        | Unique location identifier           |
+| **parent_id** (FK)   | INT                                                       | Parent location (NULL for provinces) |
+| **location_type**    | ENUM('province', 'district', 'sector', 'cell', 'village') | Level in hierarchy                   |
+| **name**             | VARCHAR(100)                                              | Location name                        |
+| **code**             | VARCHAR(40)                                               | Unique location code                 |
+| **latitude**         | DECIMAL(10,8)                                             | Center latitude                      |
+| **longitude**        | DECIMAL(11,8)                                             | Center longitude                     |
+| **boundary_geojson** | JSON                                                      | Boundary polygon (optional)          |
+| **population**       | INT                                                       | Population count                     |
+| **is_active**        | BOOLEAN DEFAULT TRUE                                      | Active status                        |
+
+**Hierarchy:**
+
+```
+Province (parent_id = NULL)
+  └── District (parent_id = province_id)
+       └── Sector (parent_id = district_id)
+            └── Cell (parent_id = sector_id)
+                 └── Village (parent_id = cell_id)
+```
+
+**Indexes:**
+
+- PRIMARY KEY (location_id)
+- INDEX (parent_id)
+- INDEX (location_type)
+- UNIQUE (code)
+- INDEX (latitude, longitude)
+
+---
+
+# TABLE 3: incident_types
+
+## Incident Taxonomy (Categories + Types Combined)
+
+**Purpose:** Hierarchical incident classification. Categories have parent_id = NULL, types have parent_id = category.
+
+| Field              | Type                    | Description                                  |
+| ------------------ | ----------------------- | -------------------------------------------- |
+| **type_id** (PK)   | SMALLINT AUTO_INCREMENT | Unique identifier                            |
+| **parent_id** (FK) | SMALLINT                | NULL = Category, otherwise = parent category |
+| **name**           | VARCHAR(100)            | Category or type name                        |
+| **description**    | TEXT                    | Description                                  |
+| **icon_name**      | VARCHAR(50)             | Material icon name                           |
+| **color_hex**      | CHAR(7)                 | Color code (#1976D2)                         |
+| **severity_level** | TINYINT                 | 1-5 (only for types, not categories)         |
+| **display_order**  | TINYINT                 | Order in list                                |
+| **is_active**      | BOOLEAN DEFAULT TRUE    | Active status                                |
+
+**Example Data:**
+
+```
+type_id | parent_id | name              | severity_level
+--------|-----------|-------------------|---------------
+1       | NULL      | Theft             | NULL (category)
+2       | NULL      | Violence          | NULL (category)
+3       | 1         | Pickpocketing     | 2
+4       | 1         | Vehicle Break-in  | 4
+5       | 2         | Assault           | 5
+```
+
+**Indexes:**
+
+- PRIMARY KEY (type_id)
+- INDEX (parent_id)
+- INDEX (is_active, display_order)
+
+---
+
+# TABLE 4: unified_cases
+
+## Grouped Incident Cases for Law Enforcement
+
+**Purpose:** Groups multiple reports of the same incident into ONE case for police. Citizens don't see this grouping.
+
+| Field                        | Type                                                                    | Description                           |
+| ---------------------------- | ----------------------------------------------------------------------- | ------------------------------------- |
+| **case_id** (PK)             | CHAR(36)                                                                | UUID - Unique case identifier         |
+| **case_number**              | VARCHAR(30)                                                             | Human-readable (CASE-2026-0130-001)   |
+| **incident_type_id** (FK)    | SMALLINT                                                                | FK → incident_types                   |
+| **location_id** (FK)         | INT                                                                     | FK → locations (resolved area)        |
+| **latitude**                 | DECIMAL(10,8)                                                           | Case centroid latitude                |
+| **longitude**                | DECIMAL(11,8)                                                           | Case centroid longitude               |
+| **radius_meters**            | DECIMAL(8,2)                                                            | Radius covering all reports           |
+| **address_description**      | VARCHAR(255)                                                            | Landmark description                  |
+| **incident_date**            | DATE                                                                    | Date incident occurred                |
+| **incident_time_start**      | TIME                                                                    | Earliest reported time                |
+| **incident_time_end**        | TIME                                                                    | Latest reported time                  |
+| **report_count**             | INT DEFAULT 1                                                           | Number of reports in case             |
+| **evidence_count**           | INT DEFAULT 0                                                           | Total evidence files                  |
+| **reporter_count**           | INT DEFAULT 1                                                           | Unique devices that reported          |
+| **combined_trust_score**     | DECIMAL(5,2)                                                            | Weighted average trust score          |
+| **ml_priority_score**        | DECIMAL(5,2)                                                            | ML-calculated priority (0-100)        |
+| **ml_confidence**            | DECIMAL(5,4)                                                            | ML confidence in validity (0-1)       |
+| **verification_status**      | ENUM('pending', 'verified', 'suspicious', 'false')                      | Overall verification                  |
+| **location_verified**        | BOOLEAN                                                                 | Rule 1: Location check passed         |
+| **motion_verified**          | BOOLEAN                                                                 | Rule 2: Motion sensor check passed    |
+| **duplicate_checked**        | BOOLEAN                                                                 | Rule 3: Duplicate detection completed |
+| **case_status**              | ENUM('new', 'reviewing', 'investigating', 'resolved', 'closed')         | Case workflow                         |
+| **priority**                 | ENUM('low', 'normal', 'high', 'urgent') DEFAULT 'normal'                | Case priority                         |
+| **assigned_officer_id** (FK) | INT                                                                     | FK → police_users                     |
+| **assigned_at**              | TIMESTAMP                                                               | When assigned                         |
+| **hotspot_id** (FK)          | INT                                                                     | FK → hotspots (if part of cluster)    |
+| **resolution_type**          | ENUM('confirmed', 'false_report', 'duplicate', 'no_action', 'referred') | How resolved                          |
+| **resolution_notes**         | TEXT                                                                    | Resolution details                    |
+| **resolved_at**              | TIMESTAMP                                                               | When resolved                         |
+| **resolved_by** (FK)         | INT                                                                     | FK → police_users                     |
+| **created_at**               | TIMESTAMP                                                               | Case creation                         |
+| **updated_at**               | TIMESTAMP                                                               | Last update                           |
+
+**Indexes:**
+
+- PRIMARY KEY (case_id)
+- UNIQUE (case_number)
+- INDEX (incident_type_id)
+- INDEX (location_id)
+- INDEX (latitude, longitude)
+- INDEX (incident_date)
+- INDEX (case_status, priority)
+- INDEX (ml_priority_score)
+- INDEX (assigned_officer_id)
+
+---
+
+# TABLE 5: incident_reports
+
+## Individual Citizen Report Submissions
+
+**Purpose:** Stores each citizen's report. Multiple reports can link to one unified_case. Citizens see their individual report status.
+
+| Field                           | Type                                                    | Description                        |
+| ------------------------------- | ------------------------------------------------------- | ---------------------------------- |
+| **report_id** (PK)              | CHAR(36)                                                | UUID - Unique report identifier    |
+| **device_id** (FK)              | CHAR(36)                                                | FK → devices (anonymous reporter)  |
+| **case_id** (FK)                | CHAR(36)                                                | FK → unified_cases (grouped case)  |
+| **incident_type_id** (FK)       | SMALLINT                                                | FK → incident_types                |
+| **title**                       | VARCHAR(200)                                            | Optional short title               |
+| **description**                 | TEXT                                                    | Incident description               |
+| **latitude**                    | DECIMAL(10,8)                                           | GPS latitude                       |
+| **longitude**                   | DECIMAL(11,8)                                           | GPS longitude                      |
+| **location_accuracy_meters**    | DECIMAL(8,2)                                            | GPS accuracy                       |
+| **location_source**             | ENUM('gps', 'network', 'manual')                        | How location obtained              |
+| **location_id** (FK)            | INT                                                     | FK → locations (resolved location) |
+| **reported_at**                 | TIMESTAMP                                               | Submission time                    |
+| **incident_occurred_at**        | TIMESTAMP                                               | When incident happened             |
+| **time_approximate**            | BOOLEAN DEFAULT FALSE                                   | User unsure of exact time          |
+| **accelerometer_data**          | JSON                                                    | Raw motion sensor data             |
+| **gyroscope_data**              | JSON                                                    | Rotation sensor data               |
+| **motion_score**                | DECIMAL(5,2)                                            | 0-100 motion authenticity score    |
+| **device_orientation**          | VARCHAR(20)                                             | portrait, landscape, flat          |
+| **battery_level**               | TINYINT                                                 | Battery % at submission            |
+| **network_type**                | VARCHAR(20)                                             | wifi, 4g, 3g                       |
+| **location_check_passed**       | BOOLEAN                                                 | Rule 1 result                      |
+| **motion_check_passed**         | BOOLEAN                                                 | Rule 2 result                      |
+| **is_duplicate**                | BOOLEAN DEFAULT FALSE                                   | Same-device duplicate rejected     |
+| **duplicate_of_report_id** (FK) | CHAR(36)                                                | Original report if duplicate       |
+| **is_grouped**                  | BOOLEAN DEFAULT FALSE                                   | Merged into multi-device case      |
+| **report_status**               | ENUM('submitted', 'processing', 'verified', 'rejected') | Report workflow                    |
+| **rejection_reason**            | VARCHAR(255)                                            | Why rejected (if applicable)       |
+| **citizen_notified**            | BOOLEAN DEFAULT FALSE                                   | Citizen received status update     |
+| **app_version**                 | VARCHAR(20)                                             | App version used                   |
+| **created_at**                  | TIMESTAMP                                               | Record creation                    |
+
+**Indexes:**
+
+- PRIMARY KEY (report_id)
+- INDEX (device_id)
+- INDEX (case_id)
+- INDEX (incident_type_id)
+- INDEX (latitude, longitude)
+- INDEX (location_id)
+- INDEX (reported_at)
+- INDEX (report_status)
+
+---
+
+# TABLE 6: report_evidence
+
+## Evidence Files (Photos, Videos, Audio)
+
+**Purpose:** Stores evidence metadata. Files stored in encrypted cloud storage.
+
+| Field                 | Type                            | Description                       |
+| --------------------- | ------------------------------- | --------------------------------- |
+| **evidence_id** (PK)  | CHAR(36)                        | UUID - Unique evidence identifier |
+| **report_id** (FK)    | CHAR(36)                        | FK → incident_reports             |
+| **case_id** (FK)      | CHAR(36)                        | FK → unified_cases                |
+| **evidence_type**     | ENUM('photo', 'video', 'audio') | Type of evidence                  |
+| **file_name**         | VARCHAR(255)                    | Original file name                |
+| **file_path**         | VARCHAR(500)                    | Encrypted storage path            |
+| **file_size_bytes**   | INT                             | File size                         |
+| **mime_type**         | VARCHAR(100)                    | MIME type                         |
+| **duration_seconds**  | SMALLINT                        | Duration (video/audio only)       |
+| **width_pixels**      | SMALLINT                        | Width (photo/video)               |
+| **height_pixels**     | SMALLINT                        | Height (photo/video)              |
+| **file_hash**         | CHAR(64)                        | SHA-256 for integrity             |
+| **captured_at**       | TIMESTAMP                       | When media was captured           |
+| **capture_latitude**  | DECIMAL(10,8)                   | GPS from EXIF                     |
+| **capture_longitude** | DECIMAL(11,8)                   | GPS from EXIF                     |
+| **is_valid**          | BOOLEAN DEFAULT TRUE            | Quality check passed              |
+| **quality_score**     | DECIMAL(5,2)                    | 0-100 quality score               |
+| **uploaded_at**       | TIMESTAMP                       | Upload time                       |
+
+**Indexes:**
+
+- PRIMARY KEY (evidence_id)
+- INDEX (report_id)
+- INDEX (case_id)
+- INDEX (evidence_type)
+
+---
+
+# TABLE 7: ml_models
+
+## Machine Learning Models for Verification
+
+**Purpose:** Stores trained ML models used to enhance the 3-rule verification system.
+
+| Field                   | Type                                                                            | Description                                  |
+| ----------------------- | ------------------------------------------------------------------------------- | -------------------------------------------- |
+| **model_id** (PK)       | INT AUTO_INCREMENT                                                              | Unique model identifier                      |
+| **model_name**          | VARCHAR(100)                                                                    | Model name                                   |
+| **model_type**          | ENUM('trust_scoring', 'anomaly_detection', 'clustering', 'priority_prediction') | What model does                              |
+| **model_version**       | VARCHAR(20)                                                                     | Version number (v1.0.0)                      |
+| **description**         | TEXT                                                                            | What this model does                         |
+| **algorithm**           | VARCHAR(50)                                                                     | Algorithm used (RandomForest, XGBoost, etc.) |
+| **input_features**      | JSON                                                                            | List of features model uses                  |
+| **output_format**       | JSON                                                                            | What model outputs                           |
+| **training_data_count** | INT                                                                             | Number of samples trained on                 |
+| **training_accuracy**   | DECIMAL(5,4)                                                                    | Training accuracy (0-1)                      |
+| **validation_accuracy** | DECIMAL(5,4)                                                                    | Validation accuracy (0-1)                    |
+| **model_file_path**     | VARCHAR(500)                                                                    | Path to model file                           |
+| **model_file_hash**     | CHAR(64)                                                                        | Model file integrity hash                    |
+| **is_active**           | BOOLEAN DEFAULT FALSE                                                           | Currently in use                             |
+| **activated_at**        | TIMESTAMP                                                                       | When activated                               |
+| **activated_by** (FK)   | INT                                                                             | FK → police_users                            |
+| **trained_at**          | TIMESTAMP                                                                       | When training completed                      |
+| **trained_by** (FK)     | INT                                                                             | FK → police_users                            |
+| **last_retrained_at**   | TIMESTAMP                                                                       | Last retraining                              |
+| **performance_metrics** | JSON                                                                            | Detailed performance data                    |
+| **created_at**          | TIMESTAMP                                                                       | Record creation                              |
+
+**Model Types Explained:**
+
+| Model Type            | Purpose                                    | Enhances Which Rule  |
+| --------------------- | ------------------------------------------ | -------------------- |
+| `trust_scoring`       | Calculates overall trust score for reports | All 3 rules          |
+| `anomaly_detection`   | Detects GPS spoofing, bot submissions      | Rule 1 + Rule 2      |
+| `clustering`          | Improves incident grouping accuracy        | Rule 3               |
+| `priority_prediction` | Predicts urgency/priority of cases         | Final prioritization |
+
+**Indexes:**
+
+- PRIMARY KEY (model_id)
+- INDEX (model_type, is_active)
+- INDEX (trained_at)
+
+---
+
+# TABLE 8: ml_predictions
+
+## ML Analysis Results Per Report
+
+**Purpose:** Stores ML prediction outputs for each incident report.
+
+| Field                      | Type                                                | Description                              |
+| -------------------------- | --------------------------------------------------- | ---------------------------------------- |
+| **prediction_id** (PK)     | CHAR(36)                                            | UUID - Unique prediction identifier      |
+| **report_id** (FK)         | CHAR(36)                                            | FK → incident_reports                    |
+| **case_id** (FK)           | CHAR(36)                                            | FK → unified_cases                       |
+| **model_id** (FK)          | INT                                                 | FK → ml_models (model used)              |
+| **ml_trust_score**         | DECIMAL(5,4)                                        | Predicted trust (0.0000-1.0000)          |
+| **ml_confidence**          | DECIMAL(5,4)                                        | Model confidence in prediction           |
+| **predicted_priority**     | ENUM('low', 'medium', 'high', 'critical')           | ML suggested priority                    |
+| **predicted_validity**     | ENUM('likely_genuine', 'uncertain', 'likely_false') | Validity prediction                      |
+| **anomaly_score**          | DECIMAL(5,4)                                        | How anomalous (0=normal, 1=very unusual) |
+| **anomaly_flags**          | JSON                                                | Specific anomalies detected              |
+| **cluster_confidence**     | DECIMAL(5,4)                                        | How certain report belongs to its case   |
+| **location_pattern_score** | DECIMAL(5,4)                                        | Location authenticity score              |
+| **motion_pattern_score**   | DECIMAL(5,4)                                        | Motion authenticity score                |
+| **time_pattern_score**     | DECIMAL(5,4)                                        | Time pattern score                       |
+| **feature_importance**     | JSON                                                | Which features influenced prediction     |
+| **raw_model_output**       | JSON                                                | Full model output for debugging          |
+| **prediction_time_ms**     | INT                                                 | How long prediction took                 |
+| **predicted_at**           | TIMESTAMP                                           | When prediction made                     |
+
+**What Each Score Means:**
+
+| Score                | Range       | Meaning                                     |
+| -------------------- | ----------- | ------------------------------------------- |
+| `ml_trust_score`     | 0.00 - 1.00 | Overall likelihood report is genuine        |
+| `ml_confidence`      | 0.00 - 1.00 | How sure the model is about its prediction  |
+| `anomaly_score`      | 0.00 - 1.00 | 0=completely normal, 1=highly suspicious    |
+| `cluster_confidence` | 0.00 - 1.00 | How well this report fits with grouped case |
+
+**Example Anomaly Flags:**
+
+```json
+{
+  "gps_jump": true, // Location jumped impossibly fast
+  "static_motion": false, // Normal motion detected
+  "unusual_time": true, // Report at unusual hour for this area
+  "repeat_pattern": false // Not a repeated false pattern
+}
+```
+
+**Indexes:**
+
+- PRIMARY KEY (prediction_id)
+- INDEX (report_id)
+- INDEX (case_id)
+- INDEX (model_id)
+- INDEX (ml_trust_score)
+- INDEX (predicted_priority)
+- INDEX (anomaly_score)
+
+---
+
+# TABLE 9: police_users
+
+## Police Authentication and Roles
+
+**Purpose:** Police accounts with role-based access control.
+
+| Field                         | Type                                                                      | Description                   |
+| ----------------------------- | ------------------------------------------------------------------------- | ----------------------------- |
+| **user_id** (PK)              | INT AUTO_INCREMENT                                                        | Unique user identifier        |
+| **username**                  | VARCHAR(50)                                                               | Unique username               |
+| **email**                     | VARCHAR(255)                                                              | Unique email                  |
+| **password_hash**             | VARCHAR(255)                                                              | Bcrypt hashed password        |
+| **full_name**                 | VARCHAR(200)                                                              | Officer's name                |
+| **badge_number**              | VARCHAR(50)                                                               | Unique badge number           |
+| **phone_number**              | VARCHAR(20)                                                               | Contact phone                 |
+| **role**                      | ENUM('super_admin', 'admin', 'commander', 'officer', 'analyst', 'viewer') | User role                     |
+| **permissions**               | JSON                                                                      | Granular permissions override |
+| **assigned_location_id** (FK) | INT                                                                       | FK → locations (jurisdiction) |
+| **can_access_all_locations**  | BOOLEAN DEFAULT FALSE                                                     | National access               |
+| **is_active**                 | BOOLEAN DEFAULT TRUE                                                      | Account active                |
+| **two_factor_enabled**        | BOOLEAN DEFAULT FALSE                                                     | 2FA enabled                   |
+| **two_factor_secret**         | VARCHAR(100)                                                              | TOTP secret                   |
+| **password_changed_at**       | TIMESTAMP                                                                 | Last password change          |
+| **failed_login_attempts**     | TINYINT DEFAULT 0                                                         | Failed logins                 |
+| **locked_until**              | TIMESTAMP                                                                 | Account lockout time          |
+| **last_login_at**             | TIMESTAMP                                                                 | Last successful login         |
+| **last_login_ip**             | VARCHAR(45)                                                               | Last login IP                 |
+| **created_at**                | TIMESTAMP                                                                 | Account creation              |
+| **created_by** (FK)           | INT                                                                       | Who created account           |
+| **updated_at**                | TIMESTAMP                                                                 | Last update                   |
+
+**Role Permissions:**
+
+| Role        | Description                             |
+| ----------- | --------------------------------------- |
+| super_admin | Full system access, ML model management |
+| admin       | User management, settings               |
+| commander   | District oversight, case assignments    |
+| officer     | View/verify cases in jurisdiction       |
+| analyst     | Analytics, ML insights, read-only       |
+| viewer      | Dashboard only                          |
+
+**Indexes:**
+
+- PRIMARY KEY (user_id)
+- UNIQUE (username)
+- UNIQUE (email)
+- UNIQUE (badge_number)
+- INDEX (role)
+- INDEX (assigned_location_id)
+
+---
+
+# TABLE 10: notifications
+
+## Police Alerts and Notifications
+
+**Purpose:** Alerts sent to police officers about cases.
+
+| Field                    | Type                                                                                                | Description                           |
+| ------------------------ | --------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| **notification_id** (PK) | CHAR(36)                                                                                            | UUID - Unique notification identifier |
+| **user_id** (FK)         | INT                                                                                                 | FK → police_users (recipient)         |
+| **notification_type**    | ENUM('new_case', 'urgent_case', 'case_update', 'hotspot_alert', 'assignment', 'ml_alert', 'system') | Type                                  |
+| **title**                | VARCHAR(200)                                                                                        | Notification title                    |
+| **message**              | TEXT                                                                                                | Notification content                  |
+| **case_id** (FK)         | CHAR(36)                                                                                            | FK → unified_cases (if related)       |
+| **hotspot_id** (FK)      | INT                                                                                                 | FK → hotspots (if related)            |
+| **priority**             | ENUM('low', 'normal', 'high', 'urgent')                                                             | Urgency                               |
+| **is_read**              | BOOLEAN DEFAULT FALSE                                                                               | Read status                           |
+| **read_at**              | TIMESTAMP                                                                                           | When read                             |
+| **is_dismissed**         | BOOLEAN DEFAULT FALSE                                                                               | Dismissed status                      |
+| **action_url**           | VARCHAR(500)                                                                                        | Link to relevant page                 |
+| **created_at**           | TIMESTAMP                                                                                           | When sent                             |
+| **expires_at**           | TIMESTAMP                                                                                           | Auto-dismiss time                     |
+
+**Indexes:**
+
+- PRIMARY KEY (notification_id)
+- INDEX (user_id, is_read)
+- INDEX (notification_type)
+- INDEX (created_at)
+
+---
+
+# TABLE 11: hotspots
+
+## Crime Cluster Detection
+
+**Purpose:** Detected incident clusters using ML-enhanced algorithms.
+
+| Field                              | Type                                                  | Description                   |
+| ---------------------------------- | ----------------------------------------------------- | ----------------------------- |
+| **hotspot_id** (PK)                | INT AUTO_INCREMENT                                    | Unique hotspot identifier     |
+| **hotspot_name**                   | VARCHAR(100)                                          | Generated name                |
+| **location_id** (FK)               | INT                                                   | FK → locations (primary area) |
+| **latitude**                       | DECIMAL(10,8)                                         | Centroid latitude             |
+| **longitude**                      | DECIMAL(11,8)                                         | Centroid longitude            |
+| **radius_meters**                  | DECIMAL(10,2)                                         | Cluster radius                |
+| **boundary_geojson**               | JSON                                                  | Boundary polygon              |
+| **case_count**                     | INT                                                   | Number of cases               |
+| **total_reports**                  | INT                                                   | Total reports                 |
+| **avg_trust_score**                | DECIMAL(5,2)                                          | Average trust score           |
+| **avg_ml_confidence**              | DECIMAL(5,4)                                          | Average ML confidence         |
+| **dominant_incident_type_id** (FK) | SMALLINT                                              | Most common type              |
+| **dominant_type_percentage**       | DECIMAL(5,2)                                          | % of dominant type            |
+| **risk_level**                     | ENUM('low', 'medium', 'high', 'critical')             | Risk assessment               |
+| **priority_score**                 | DECIMAL(5,2)                                          | 0-100 priority                |
+| **first_incident_at**              | TIMESTAMP                                             | Earliest incident             |
+| **last_incident_at**               | TIMESTAMP                                             | Latest incident               |
+| **peak_hour**                      | TINYINT                                               | 0-23, most active hour        |
+| **peak_day_of_week**               | TINYINT                                               | 0-6, most active day          |
+| **status**                         | ENUM('active', 'monitoring', 'addressed', 'resolved') | Status                        |
+| **assigned_officer_id** (FK)       | INT                                                   | FK → police_users             |
+| **detected_at**                    | TIMESTAMP                                             | Detection time                |
+| **updated_at**                     | TIMESTAMP                                             | Last update                   |
+
+**Indexes:**
+
+- PRIMARY KEY (hotspot_id)
+- INDEX (location_id)
+- INDEX (latitude, longitude)
+- INDEX (status, risk_level)
+
+---
+
+# TABLE 12: daily_statistics
+
+## Pre-Aggregated Analytics
+
+**Purpose:** Pre-calculated daily statistics for fast dashboard loading.
+
+| Field                       | Type               | Description                      |
+| --------------------------- | ------------------ | -------------------------------- |
+| **stat_id** (PK)            | INT AUTO_INCREMENT | Unique stat identifier           |
+| **stat_date**               | DATE               | Date of statistics               |
+| **location_id** (FK)        | INT                | FK → locations (NULL = national) |
+| **total_reports**           | INT DEFAULT 0      | Reports submitted                |
+| **verified_reports**        | INT DEFAULT 0      | Reports verified                 |
+| **rejected_reports**        | INT DEFAULT 0      | Reports rejected                 |
+| **new_cases**               | INT DEFAULT 0      | Cases created                    |
+| **resolved_cases**          | INT DEFAULT 0      | Cases resolved                   |
+| **active_hotspots**         | INT DEFAULT 0      | Active hotspots                  |
+| **avg_ml_trust_score**      | DECIMAL(5,4)       | Average ML trust score           |
+| **avg_response_time_hours** | DECIMAL(5,2)       | Avg response time                |
+| **ml_accuracy_rate**        | DECIMAL(5,4)       | ML prediction accuracy           |
+| **top_incident_types**      | JSON               | Top 5 incident types with counts |
+| **hourly_distribution**     | JSON               | Reports per hour (24 values)     |
+| **calculated_at**           | TIMESTAMP          | When calculated                  |
+
+**Indexes:**
+
+- PRIMARY KEY (stat_id)
+- UNIQUE (stat_date, location_id)
+- INDEX (stat_date)
+- INDEX (location_id)
+
+---
+
+# TABLE 13: public_safety_zones
+
+## Anonymized Public Safety Map
+
+**Purpose:** Aggregated safety data for public community map. No case-level details exposed.
+
+| Field                  | Type                                       | Description            |
+| ---------------------- | ------------------------------------------ | ---------------------- |
+| **zone_id** (PK)       | INT AUTO_INCREMENT                         | Unique zone identifier |
+| **location_id** (FK)   | INT                                        | FK → locations         |
+| **latitude**           | DECIMAL(10,8)                              | Zone center latitude   |
+| **longitude**          | DECIMAL(11,8)                              | Zone center longitude  |
+| **radius_meters**      | INT DEFAULT 500                            | Zone radius            |
+| **safety_level**       | ENUM('safe', 'caution', 'alert', 'danger') | Safety rating          |
+| **safety_score**       | DECIMAL(5,2)                               | 0-100 score            |
+| **incident_count_7d**  | INT DEFAULT 0                              | Incidents last 7 days  |
+| **incident_count_30d** | INT DEFAULT 0                              | Incidents last 30 days |
+| **trend**              | ENUM('improving', 'stable', 'worsening')   | Trend direction        |
+| **dominant_category**  | VARCHAR(100)                               | Most common category   |
+| **peak_risk_hours**    | JSON                                       | Hours with higher risk |
+| **tips**               | JSON                                       | Safety tips for area   |
+| **last_updated**       | TIMESTAMP                                  | When recalculated      |
+| **is_visible**         | BOOLEAN DEFAULT TRUE                       | Show on public map     |
+
+**Indexes:**
+
+- PRIMARY KEY (zone_id)
+- INDEX (location_id)
+- INDEX (latitude, longitude)
+- INDEX (safety_level)
+
+---
+
+# TABLE 14: system_settings
+
+## Application Configuration
+
+**Purpose:** Centralized system configuration including ML settings.
+
+| Field                | Type                                        | Description               |
+| -------------------- | ------------------------------------------- | ------------------------- |
+| **setting_id** (PK)  | INT AUTO_INCREMENT                          | Unique setting identifier |
+| **setting_key**      | VARCHAR(100)                                | Unique setting key        |
+| **setting_value**    | TEXT                                        | Setting value             |
+| **value_type**       | ENUM('string', 'number', 'boolean', 'json') | Data type                 |
+| **category**         | VARCHAR(50)                                 | Setting category          |
+| **description**      | TEXT                                        | What setting does         |
+| **is_public**        | BOOLEAN DEFAULT FALSE                       | Visible to mobile app     |
+| **requires_restart** | BOOLEAN DEFAULT FALSE                       | Needs service restart     |
+| **updated_at**       | TIMESTAMP                                   | Last update               |
+| **updated_by** (FK)  | INT                                         | FK → police_users         |
+
+**Key Settings:**
+
+| Category     | Key                           | Description                                |
+| ------------ | ----------------------------- | ------------------------------------------ |
+| verification | `location_accuracy_threshold` | Max GPS accuracy (default: 100m)           |
+| verification | `motion_score_threshold`      | Min motion score (default: 30)             |
+| verification | `duplicate_radius_meters`     | Duplicate detection radius (default: 200m) |
+| verification | `duplicate_time_window_hours` | Duplicate time window (default: 24h)       |
+| ml           | `ml_enabled`                  | Enable ML enhancement (default: true)      |
+| ml           | `ml_trust_threshold`          | Min ML trust score (default: 0.3)          |
+| ml           | `ml_auto_reject_threshold`    | Auto-reject below (default: 0.1)           |
+| ml           | `ml_retrain_frequency_days`   | How often to retrain (default: 7)          |
+
+**Indexes:**
+
+- PRIMARY KEY (setting_id)
+- UNIQUE (setting_key)
+- INDEX (category)
+
+---
+
+# TABLE 15: activity_logs
+
+## Complete Audit Trail
+
+**Purpose:** Records all system activities for security and compliance.
+
+| Field              | Type                                                | Description                     |
+| ------------------ | --------------------------------------------------- | ------------------------------- |
+| **log_id** (PK)    | BIGINT AUTO_INCREMENT                               | Unique log identifier           |
+| **actor_type**     | ENUM('system', 'device', 'police_user', 'ml_model') | Who performed action            |
+| **actor_id**       | VARCHAR(50)                                         | device_id, user_id, or model_id |
+| **action_type**    | VARCHAR(100)                                        | What was done                   |
+| **entity_type**    | VARCHAR(50)                                         | What entity affected            |
+| **entity_id**      | VARCHAR(50)                                         | Entity identifier               |
+| **action_details** | JSON                                                | Full action context             |
+| **ip_address**     | VARCHAR(45)                                         | Client IP                       |
+| **user_agent**     | VARCHAR(500)                                        | Client info                     |
+| **request_id**     | CHAR(36)                                            | Request trace ID                |
+| **success**        | BOOLEAN DEFAULT TRUE                                | Action succeeded                |
+| **error_message**  | TEXT                                                | Error if failed                 |
+| **created_at**     | TIMESTAMP                                           | When occurred                   |
+
+**Common Action Types:**
+
+| Action Type            | Description                |
+| ---------------------- | -------------------------- |
+| `report.submitted`     | New report received        |
+| `report.verified`      | Report passed verification |
+| `case.created`         | New unified case created   |
+| `case.merged`          | Reports grouped into case  |
+| `ml.prediction`        | ML analyzed a report       |
+| `ml.model.activated`   | New ML model activated     |
+| `police.login`         | Police user logged in      |
+| `police.case.assigned` | Case assigned to officer   |
+
+**Indexes:**
+
+- PRIMARY KEY (log_id)
+- INDEX (actor_type, actor_id)
+- INDEX (action_type)
+- INDEX (entity_type, entity_id)
+- INDEX (created_at)
+
+---
+
+## Summary: How Everything Works Together
+
+### 1. Citizen Submits Report
+
+```
+Mobile App → incident_reports table
+           → 3 Rules Check (location, motion, duplicate)
+           → ML Analysis → ml_predictions table
+           → If similar reports exist → Link to unified_cases
+           → Citizen sees: "Report received, being reviewed"
+```
+
+### 2. ML Enhancement Flow
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                    ML ENHANCEMENT FLOW                         │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  incident_reports (new report arrives)                         │
+│         │                                                      │
+│         ▼                                                      │
+│  ┌─────────────────────────────────────┐                       │
+│  │  3 HARDCODED RULES (Always Run)     │                       │
+│  ├─────────────────────────────────────┤                       │
+│  │  • Rule 1: Location valid?          │──► location_check_    │
+│  │  • Rule 2: Motion score ≥ 30?       │    passed             │
+│  │  • Rule 3: Is duplicate?            │──► motion_check_      │
+│  └─────────────────────────────────────┘    passed             │
+│         │                                                      │
+│         ▼                                                      │
+│  ┌─────────────────────────────────────┐                       │
+│  │  ML MODELS (Enhancement Layer)       │                       │
+│  ├─────────────────────────────────────┤                       │
+│  │                                     │                       │
+│  │  ml_models table contains:          │                       │
+│  │  ├── trust_scoring model            │                       │
+│  │  ├── anomaly_detection model        │                       │
+│  │  ├── clustering model               │                       │
+│  │  └── priority_prediction model      │                       │
+│  │                                     │                       │
+│  │  Models analyze:                    │                       │
+│  │  • GPS patterns (spoofing?)         │                       │
+│  │  • Motion patterns (bot?)           │                       │
+│  │  • Time patterns (suspicious?)      │                       │
+│  │  • Historical patterns              │                       │
+│  └─────────────────────────────────────┘                       │
+│         │                                                      │
+│         ▼                                                      │
+│  ┌─────────────────────────────────────┐                       │
+│  │  ml_predictions table stores:       │                       │
+│  ├─────────────────────────────────────┤                       │
+│  │  • ml_trust_score (0.0 - 1.0)       │                       │
+│  │  • predicted_priority               │                       │
+│  │  • anomaly_score                    │                       │
+│  │  • anomaly_flags (JSON)             │                       │
+│  │  • cluster_confidence               │                       │
+│  └─────────────────────────────────────┘                       │
+│         │                                                      │
+│         ▼                                                      │
+│  unified_cases updated with:                                   │
+│  • ml_priority_score                                           │
+│  • ml_confidence                                               │
+│  • Priority ordering for police dashboard                      │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### 3. Police View
+
+```
+Police Dashboard sees:
+- unified_cases (grouped incidents)
+- All linked incident_reports
+- All report_evidence (photos, videos)
+- ml_predictions (why ML flagged/prioritized)
+- Priority ordered by ML scores
+```
+
+### 4. Evidence Grouping Example
+
+```
+3 citizens report same car accident:
+
+┌─────────────────────────────────────────────────────────────┐
+│  incident_reports table:                                    │
+│  ├── Report A (device_001, case_id = CASE-001)             │
+│  ├── Report B (device_002, case_id = CASE-001)             │
+│  └── Report C (device_003, case_id = CASE-001)             │
+│                                                             │
+│  ml_predictions table:                                      │
+│  ├── Prediction for Report A (trust: 0.85)                  │
+│  ├── Prediction for Report B (trust: 0.92)                  │
+│  └── Prediction for Report C (trust: 0.78)                  │
+│                                                             │
+│  unified_cases table:                                       │
+│  └── CASE-001                                               │
+│      ├── report_count: 3                                    │
+│      ├── combined_trust_score: 85.0                         │
+│      ├── ml_priority_score: 92.0                            │
+│      └── ml_confidence: 0.85                                │
+│                                                             │
+│  report_evidence table:                                     │
+│  ├── Photo from Report A (case_id = CASE-001)              │
+│  ├── Video from Report B (case_id = CASE-001)              │
+│  └── Photo from Report C (case_id = CASE-001)              │
+└─────────────────────────────────────────────────────────────┘
+
+CITIZEN VIEW:
+├── Device 001 sees: "Your report is being reviewed"
+├── Device 002 sees: "Your report is being reviewed"
+└── Device 003 sees: "Your report is being reviewed"
+
+POLICE VIEW:
+└── One case "CASE-001" with:
+    ├── 3 linked reports
+    ├── 3 pieces of evidence
+    ├── ML trust score: 85%
+    └── Priority: HIGH (ML predicted)
+```
+
+---
+
+## Data Privacy Summary
+
+| What Citizens Know          | What Police Know           |
+| --------------------------- | -------------------------- |
+| "Report submitted"          | Full ML analysis           |
+| "Being reviewed"            | All grouped reports        |
+| "Action taken"              | Trust scores               |
+| Their own report only       | All evidence combined      |
+| Never know about grouping   | Case investigation history |
+| Never know about ML scoring | ML prediction details      |
+
+---
+
+## Table Count: 15 Tables
+
+| Category      | Tables                                                                               | Count  |
+| ------------- | ------------------------------------------------------------------------------------ | ------ |
+| **Core**      | devices, locations, incident_types, unified_cases, incident_reports, report_evidence | 6      |
+| **ML**        | ml_models, ml_predictions                                                            | 2      |
+| **Police**    | police_users, notifications                                                          | 2      |
+| **Analytics** | hotspots, daily_statistics                                                           | 2      |
+| **Public**    | public_safety_zones                                                                  | 1      |
+| **System**    | system_settings, activity_logs                                                       | 2      |
+| **TOTAL**     |                                                                                      | **15** |
