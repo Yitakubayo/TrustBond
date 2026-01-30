@@ -133,54 +133,11 @@ This database structure contains **15 tables** designed to support:
 | 8   | `ml_predictions`      | ML analysis results per report                                     | ML        |
 | 9   | `police_users`        | Police authentication and roles                                    | Police    |
 | 10  | `notifications`       | Alerts for police officers                                         | Police    |
-| 11  | `hotspots`            | Crime cluster detection                                            | Analytics |
+| 11  | `hotspots`            | Crime cluster detection (multiple crime types per area)            | Analytics |
 | 12  | `daily_statistics`    | Pre-aggregated analytics                                           | Analytics |
 | 13  | `public_safety_zones` | Anonymized public safety map                                       | Public    |
 | 14  | `system_settings`     | Application configuration                                          | System    |
 | 15  | `activity_logs`       | Complete audit trail                                               | System    |
-
----
-
-## Table Relationships Summary
-
-```
-                            ┌─────────────────┐
-                            │   ml_models     │
-                            │ (trained models)│
-                            └────────┬────────┘
-                                     │ uses
-                                     ▼
-┌──────────┐    submits    ┌─────────────────┐    analyzed by    ┌────────────────┐
-│ devices  │──────────────►│ incident_reports│◄─────────────────►│ ml_predictions │
-│(anon ID) │               │ (3-rule checked)│                   │ (ML scores)    │
-└──────────┘               └────────┬────────┘                   └────────────────┘
-                                    │
-                          ┌─────────┼─────────┐
-                          │         │         │
-                          ▼         ▼         ▼
-              ┌───────────────┐ ┌───────────────┐ ┌───────────────────┐
-              │ unified_cases │ │report_evidence│ │    locations      │
-              │(grouped cases)│ │(photos/videos)│ │(Rwanda geography) │
-              └───────┬───────┘ └───────────────┘ └───────────────────┘
-                      │
-         ┌────────────┼────────────┬────────────┐
-         ▼            ▼            ▼            ▼
-┌─────────────┐ ┌───────────┐ ┌──────────┐ ┌────────────────────┐
-│police_users │ │ hotspots  │ │incident_ │ │ public_safety_zones│
-│(view cases) │ │(clusters) │ │  types   │ │   (public map)     │
-└──────┬──────┘ └───────────┘ └──────────┘ └────────────────────┘
-       │
-       ▼
-┌──────────────┐     ┌─────────────────┐     ┌───────────────┐
-│notifications │     │daily_statistics │     │ activity_logs │
-│  (alerts)    │     │  (analytics)    │     │   (audit)     │
-└──────────────┘     └─────────────────┘     └───────────────┘
-
-                     ┌─────────────────┐
-                     │ system_settings │
-                     │  (config)       │
-                     └─────────────────┘
-```
 
 ---
 
@@ -955,6 +912,99 @@ POLICE VIEW:
 | Their own report only       | All evidence combined      |
 | Never know about grouping   | Case investigation history |
 | Never know about ML scoring | ML prediction details      |
+
+---
+
+## Relationship Summary
+
+- One **device** → many **reports**
+- One **report** → many **evidence files**
+- One **report** → one **ML prediction**
+- One **unified_case** → many **reports** (grouped)
+- One **hotspot** → many **unified_cases** (different crime types in same area)
+- One **police_user** → many **assigned cases**
+- One **location** → many **child locations** (hierarchical)
+- One **incident_type** → many **sub-types** (hierarchical)
+
+---
+
+## ML Hotspot & Clustering Logic
+
+### Hotspots Are NOT Limited to One Crime Type
+
+A **hotspot** represents a geographic area with high incident activity. It can contain:
+
+- **Multiple different crime types** in the same area
+- Example: A market area might have theft, vandalism, AND assault incidents
+
+### What ML Analyzes for Hotspots
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    HOTSPOT DETECTION                            │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ML clusters incidents by LOCATION, not by crime type:          │
+│                                                                 │
+│  Example Hotspot: "Nyabugogo Market Area"                       │
+│  ├── 15 Theft incidents (45%)                                   │
+│  ├── 8 Vandalism incidents (24%)                                │
+│  ├── 6 Assault incidents (18%)                                  │
+│  └── 4 Other incidents (13%)                                    │
+│                                                                 │
+│  Hotspot stores:                                                │
+│  • dominant_incident_type_id = Theft (most common)              │
+│  • But ALL crime types are tracked in the area                  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Dashboard Analytics Display
+
+The police dashboard shows comprehensive crime analytics:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                 POLICE DASHBOARD ANALYTICS                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  📊 CRIME DISTRIBUTION BY REGION                                │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ Kigali City:                                            │   │
+│  │   • Theft: 234 cases (most common)                      │   │
+│  │   • Vandalism: 89 cases                                 │   │
+│  │   • Assault: 45 cases                                   │   │
+│  │   • Fraud: 23 cases                                     │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  🔥 HOTSPOT AREAS (Multiple Crime Types)                        │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ 1. Nyabugogo Market - 33 incidents (mixed types)        │   │
+│  │ 2. Kimironko Area - 28 incidents (mixed types)          │   │
+│  │ 3. Downtown Kigali - 21 incidents (mixed types)         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  📈 INSIGHTS:                                                   │
+│  • "Theft happens more in market regions"                      │
+│  • "Assault peaks on weekend nights"                           │
+│  • "Vandalism concentrated in urban areas"                     │
+│  • "This area has 3 different crime types active"              │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### daily_statistics Table Supports This
+
+The `daily_statistics` table stores:
+
+- `top_incident_types` (JSON) - Top 5 crime types with counts per region
+- `hourly_distribution` (JSON) - When each crime type peaks
+
+This enables dashboard insights like:
+
+- "Theft incidents happen 40% more in this region than others"
+- "This hotspot has 5 different crime types reported"
+- "Assault cases peak between 10 PM - 2 AM"
 
 ---
 
