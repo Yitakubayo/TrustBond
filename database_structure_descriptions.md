@@ -182,16 +182,3 @@ Groups multiple reports of the same incident.
 | report_count  | INT           | Reports in group       |
 | created_at    | TIMESTAMP     | Group creation time    |
 
-# SYSTEM LOGIC (FINAL & EXAM-READY)
-
-✔ Anonymous reporters → **devices**
-✔ Raw submissions → **reports**
-✔ Quality & evidence validation → **rules + ML**
-✔ ML ≠ truth → **ml_predictions ≠ police_reviews**
-✔ Police accountability → **police_users → police_reviews**
-✔ Same incident many reports → **incident_groups**
-✔ Different incidents same place → **hotspots**
-✔ Location auto-derived → **GIS tables**
-
-|  |  |
-| - | - |
