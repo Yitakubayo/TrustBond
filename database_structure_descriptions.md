@@ -193,6 +193,6 @@ for incident type we can set those types in the codes instead of creating the ta
 
 please your comment here?
 
-I'm also still working to see i can merge sector,cell,.. into one location tables.
+I'm also still working to see i can merge sector,cell,.. into one location table.
 
 good night.
