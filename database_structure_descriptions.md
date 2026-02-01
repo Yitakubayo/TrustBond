@@ -198,11 +198,17 @@ I'm also still working to see i can merge sector,cell,.. into one location table
 good night.
 ---
 I think we need to add notification table 
-**Use cases**
+
+**Use cases** 
+
 police gets new report alert
+
 supervisor gets high-risk hotspot alert
+
 report assigned to officer
+
 review requested
+
 system warnings
 
 | Column              | Type                                           | Description                              |
@@ -221,10 +227,15 @@ system warnings
 and on incident type I prefer table instead of embeding them in code
 
 Problems with hardcoding:
+
 cannot change without redeploy
+
 cannot add new types from admin panel
+
 harder analytics
+
 poor normalization
+
 bad practice for growing systems
 
 | Column           | Type                 | Description                            |
@@ -238,11 +249,15 @@ bad practice for growing systems
 
 
 **Missing: report assignment workflow**
+
 Right now:
+
 reports exist
+
 police reviews exist
 
 But:
+
 Who is assigned to handle the report?
 
 | Column         | Type                                                 | Description      |
