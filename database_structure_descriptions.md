@@ -272,3 +272,7 @@ Who is assigned to handle the report?
 
 
 **good night**
+
+**Thank you for these recommendations I'm going to include them**
+
+
