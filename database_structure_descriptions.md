@@ -196,3 +196,64 @@ please your comment here?
 I'm also still working to see i can merge sector,cell,.. into one location table.
 
 good night.
+---
+I think we need to add notification table 
+**Use cases**
+police gets new report alert
+supervisor gets high-risk hotspot alert
+report assigned to officer
+review requested
+system warnings
+
+| Column              | Type                                           | Description                              |
+| ------------------- | ---------------------------------------------- | ---------------------------------------- |
+| notification_id     | UUID (PK)                                      | Unique notification ID                   |
+| police_user_id      | INT (FK → police_users.police_user_id)         | Recipient officer                        |
+| title               | VARCHAR(150)                                   | Short notification title                 |
+| message             | TEXT                                           | Detailed message                         |
+| type                | ENUM('report','hotspot','assignment','system') | Notification category                    |
+| related_entity_type | VARCHAR(50)                                    | Related table name (report/hotspot/etc.) |
+| related_entity_id   | CHAR(36)                                       | Related record ID                        |
+| is_read             | BOOLEAN DEFAULT FALSE                          | Read status                              |
+| created_at          | TIMESTAMP                                      | Time created                             |
+
+
+and on incident type I prefer table instead of embeding them in code
+
+Problems with hardcoding:
+cannot change without redeploy
+cannot add new types from admin panel
+harder analytics
+poor normalization
+bad practice for growing systems
+
+| Column           | Type                 | Description                            |
+| ---------------- | -------------------- | -------------------------------------- |
+| incident_type_id | SMALLINT (PK)        | Incident type ID                       |
+| type_name        | VARCHAR(100)         | Name (Theft, Assault, Vandalism, etc.) |
+| description      | TEXT                 | Type explanation                       |
+| severity_weight  | DECIMAL(3,2)         | Risk/severity weight for analytics/ML  |
+| is_active        | BOOLEAN DEFAULT TRUE | Availability flag                      |
+| created_at       | TIMESTAMP            | Creation time                          |
+
+
+**Missing: report assignment workflow**
+Right now:
+reports exist
+police reviews exist
+
+But:
+Who is assigned to handle the report?
+
+| Column         | Type                                                 | Description      |
+| -------------- | ---------------------------------------------------- | ---------------- |
+| assignment_id  | UUID (PK)                                            | Assignment ID    |
+| report_id      | UUID (FK → reports.report_id)                        | Assigned report  |
+| police_user_id | INT (FK → police_users.police_user_id)               | Assigned officer |
+| status         | ENUM('assigned','investigating','resolved','closed') | Case progress    |
+| priority       | ENUM('low','medium','high','urgent')                 | Urgency level    |
+| assigned_at    | TIMESTAMP                                            | Assignment time  |
+| completed_at   | TIMESTAMP NULL                                       | Completion time  |
+
+
+**good night**
