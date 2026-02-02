@@ -281,3 +281,4 @@ Who is assigned to handle the report?
 
 *Tell me how you think we can do it?*
 
+**what about addition of settings to adminpanel so that, will be able to change anything manually**
