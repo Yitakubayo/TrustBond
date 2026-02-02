@@ -279,3 +279,5 @@ Who is assigned to handle the report?
 
 **I have been thinking how we can make admin to set the privileges of other users like supervisor and police**
 
+*Tell me how you think we can do it?*
+
