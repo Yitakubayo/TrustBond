@@ -275,4 +275,7 @@ Who is assigned to handle the report?
 
 **Thank you for these recommendations I'm going to include them**
 
+**morning**
+
+**I have been thinking how we can make admin to set the privileges of other users like supervisor and police**
 
