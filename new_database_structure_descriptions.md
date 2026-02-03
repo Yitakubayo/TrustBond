@@ -41,6 +41,10 @@
 | reported_at         | TIMESTAMP                           | Submission time   |
 | rule_status         | ENUM('passed','flagged','rejected') | Rule check        |
 | is_flagged          | BOOLEAN                             | Suspicious marker |
+| feature_vector      | JSONB                               | Precomputed ML features      |
+| ai_ready            | BOOLEAN                            | Indicates features extracted |
+| features_extracted  | TIMESTAMP                           | Feature generation time      |
+
 
 ## 4. evidence_files — Report Evidence
 
@@ -55,6 +59,12 @@
 | captured_at     | TIMESTAMP             | Capture time  |
 | is_live_capture | BOOLEAN               | Live capture  |
 | uploaded_at     | TIMESTAMP             | Upload time   |
+| perceptual_hash  | VARCHAR(128)                     | duplicate detection |
+| blur_score       | DECIMAL(6,3)                     | image clarity       |
+| tamper_score     | DECIMAL(6,3)                     | manipulation risk   |
+| ai_quality_label | ENUM('good','poor','suspicious') | AI decision         |
+| ai_checked_at    | TIMESTAMP                        | analysis time       |
+
 
 ## 5. ml_predictions — Machine Learning Outputs (NOT Truth)
 
@@ -66,6 +76,12 @@
 | prediction_label | ENUM('likely_real','suspicious','fake') | Prediction       |
 | model_version    | VARCHAR(50)                             | Model version    |
 | evaluated_at     | TIMESTAMP                               | Evaluation time  |
+| confidence       | DECIMAL(5,2)                            | Probability score                |
+| explanation      | JSONB                                   | Feature importance / SHAP values |
+| processing_time  | INT                                     | Performance monitoring           |
+| model_type       | VARCHAR(50)                             | random_forest / anomaly / vision |
+| is_final         | BOOLEAN                                  | Marks production decision        |
+
 
 ## 6. police_users — Police Accounts & Roles
 
@@ -95,6 +111,10 @@
 | decision       | ENUM('confirmed','rejected','investigation') | Verdict         |
 | review_note    | TEXT                                         | Notes           |
 | reviewed_at    | TIMESTAMP                                    | Review time     |
+| ground_truth_label| ENUM('real','fake')                        | training label       |
+| confidence_level  | DECIMAL(5,2)                            | officer certainty    |
+| used_for_training | BOOLEAN                                   | prevent data leakage |
+
 
 ## 8. locations — Administrative Boundaries (Musanze)
 
